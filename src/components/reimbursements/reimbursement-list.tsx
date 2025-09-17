@@ -32,7 +32,15 @@ interface ReimbursementRequest {
   notes?: string
   createdAt: string
   updatedAt: string
-  reimbursements: any[]
+  reimbursements: Array<{
+    id: string;
+    amount: number;
+    method: string;
+    transferDate?: string;
+    reference?: string;
+    notes?: string;
+    createdAt: string;
+  }>
 }
 
 interface ReimbursementListProps {

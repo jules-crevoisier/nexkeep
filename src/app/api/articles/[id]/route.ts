@@ -6,8 +6,9 @@ import { prisma } from '@/lib/prisma';
 // GET /api/articles/[id] - Récupérer un article spécifique
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -16,7 +17,7 @@ export async function GET(
 
     const article = await prisma.article.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -35,8 +36,9 @@ export async function GET(
 // PUT /api/articles/[id] - Mettre à jour un article
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -48,7 +50,7 @@ export async function PUT(
     // Vérifier que l'article appartient à l'utilisateur
     const existingArticle = await prisma.article.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -72,7 +74,7 @@ export async function PUT(
     }
 
     const article = await prisma.article.update({
-      where: { id: params.id },
+      where: { id: id },
       data
     });
 
@@ -86,8 +88,9 @@ export async function PUT(
 // DELETE /api/articles/[id] - Supprimer un article
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -97,7 +100,7 @@ export async function DELETE(
     // Vérifier que l'article appartient à l'utilisateur
     const existingArticle = await prisma.article.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -107,7 +110,7 @@ export async function DELETE(
     }
 
     await prisma.article.delete({
-      where: { id: params.id }
+      where: { id: id }
     });
 
     return NextResponse.json({ message: 'Article supprimé avec succès' });

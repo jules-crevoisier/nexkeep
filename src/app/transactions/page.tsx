@@ -18,7 +18,6 @@ import {
 import { 
   Plus,
   Minus,
-  Wallet,
   AlertTriangle
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -89,7 +88,7 @@ export default function TransactionsPage() {
     await processExpense(expenseForm);
   };
 
-  const processExpense = async (expenseData: {name: string, amount: string, description: string}) => {
+  const processExpense = async (expenseData: {name: string, amount: string, description: string, category?: string}) => {
     setLoading(true);
     try {
       const response = await fetch("/api/transactions", {
@@ -177,7 +176,7 @@ export default function TransactionsPage() {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Plus className="h-5 w-5 text-green-600" />
-                <span>Ajouter de l'argent</span>
+                <span>Ajouter de l&apos;argent</span>
               </CardTitle>
               <CardDescription>
                 Enregistrer un revenu ou un ajout
@@ -233,7 +232,7 @@ export default function TransactionsPage() {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Minus className="h-5 w-5 text-red-600" />
-                <span>Dépenser de l'argent</span>
+                <span>Dépenser de l&apos;argent</span>
               </CardTitle>
               <CardDescription>
                 Enregistrer une dépense

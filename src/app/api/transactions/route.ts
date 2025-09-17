@@ -15,7 +15,14 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate")
     const endDate = searchParams.get("endDate")
 
-    const where: any = {
+    const where: {
+      userId: string;
+      type?: string;
+      date?: {
+        gte: Date;
+        lte: Date;
+      };
+    } = {
       userId: session.user.id
     }
 

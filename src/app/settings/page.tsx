@@ -10,15 +10,28 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ChangePasswordForm } from "@/components/forms/change-password-form";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { AuthGuard } from "@/components/auth/auth-guard";
-import { useState } from "react";
+import { BudgetModificationForm } from "@/components/forms/budget-modification-form";
+import { useState, useEffect } from "react";
 
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
+  const [currentBudget, setCurrentBudget] = useState(0);
+
+  useEffect(() => {
+    if (session?.user?.budgetInitial !== undefined) {
+      setCurrentBudget(session.user.budgetInitial);
+    }
+  }, [session]);
 
   const handleSignOut = async () => {
     setLoading(true);
     await signOut({ callbackUrl: "/login" });
+  };
+
+  const handleBudgetUpdated = (newBudget: number) => {
+    setCurrentBudget(newBudget);
+    // Le composant BudgetModificationForm émet déjà l'événement 'budgetUpdated'
   };
 
 
@@ -54,7 +67,7 @@ export default function SettingsPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input 
                   id="email" 
-                  value={session.user.email || ""} 
+                  value={session?.user?.email || ""} 
                   disabled 
                   className="bg-muted"
                 />
@@ -63,16 +76,10 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="budget">Budget Initial</Label>
-                <Input 
-                  id="budget" 
-                  value={`€${(session.user.budgetInitial || 0).toFixed(2)}`} 
-                  disabled 
-                  className="bg-muted"
+                <BudgetModificationForm
+                  currentBudget={currentBudget}
+                  onBudgetUpdated={handleBudgetUpdated}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Le budget initial ne peut pas être modifié
-                </p>
               </div>
             </CardContent>
           </Card>

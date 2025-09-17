@@ -6,8 +6,9 @@ import { prisma } from '@/lib/prisma';
 // GET /api/invoices/[id] - Récupérer une facture spécifique
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -16,7 +17,7 @@ export async function GET(
 
     const invoice = await prisma.invoice.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       },
       include: {
@@ -44,8 +45,9 @@ export async function GET(
 // PUT /api/invoices/[id] - Mettre à jour une facture
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -57,7 +59,7 @@ export async function PUT(
     // Vérifier que la facture appartient à l'utilisateur
     const existingInvoice = await prisma.invoice.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -85,14 +87,14 @@ export async function PUT(
     }
 
     const invoice = await prisma.invoice.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         ...data,
         // Si on met à jour les articles, supprimer les anciens et créer les nouveaux
         ...(data.items && {
           items: {
             deleteMany: {},
-            create: data.items.map((item: any) => ({
+            create: data.items.map((item: { description: string; quantity: number; unitPrice: number; tvaRate: number; articleId?: string }) => ({
               description: item.description,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
@@ -126,8 +128,9 @@ export async function PUT(
 // DELETE /api/invoices/[id] - Supprimer une facture
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -137,7 +140,7 @@ export async function DELETE(
     // Vérifier que la facture appartient à l'utilisateur
     const existingInvoice = await prisma.invoice.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -147,7 +150,7 @@ export async function DELETE(
     }
 
     await prisma.invoice.delete({
-      where: { id: params.id }
+      where: { id: id }
     });
 
     return NextResponse.json({ message: 'Facture supprimée avec succès' });

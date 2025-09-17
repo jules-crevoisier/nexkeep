@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
         organisationId: data.organisationId,
         clientId: data.clientId,
         items: {
-          create: data.items.map((item: any) => ({
+          create: data.items.map((item: { description: string; quantity: number; unitPrice: number; tvaRate: number; articleId?: string }) => ({
             description: item.description,
             quantity: item.quantity,
             unitPrice: item.unitPrice,

@@ -15,44 +15,78 @@ import {
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { Transaction } from "@/types";
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userBudgetInitial, setUserBudgetInitial] = useState(0);
 
-  const fetchTransactions = async () => {
+  const fetchUserData = async () => {
     try {
-      const response = await fetch("/api/transactions");
-      if (response.ok) {
-        const data = await response.json();
-        setTransactions(data);
+      // Récupérer les transactions
+      const transactionsResponse = await fetch("/api/transactions");
+      if (transactionsResponse.ok) {
+        const transactionsData = await transactionsResponse.json();
+        setTransactions(transactionsData);
+      }
+
+      // Récupérer le profil utilisateur avec budget initial actuel
+      const userResponse = await fetch("/api/user/profile");
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        setUserBudgetInitial(userData.budgetInitial || 0);
       }
     } catch (error) {
-      console.error("Error fetching transactions:", error);
+      console.error("Error fetching user data:", error);
     }
     setLoading(false);
   };
 
   useEffect(() => {
     if (session) {
-      fetchTransactions();
+      fetchUserData();
     }
   }, [session]);
 
+  // Rafraîchir les données quand la page devient visible (ex: retour depuis paramètres)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && session) {
+        fetchUserData();
+      }
+    };
+
+    const handleBudgetUpdate = (event: CustomEvent) => {
+      if (session) {
+        // Mettre à jour directement le budget initial sans refetch complet
+        setUserBudgetInitial(event.detail.newBudget);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
+    };
+  }, [session]);
+
   const totalIncome = transactions
-    .filter((t: any) => t.type === "income")
-    .reduce((sum: number, t: any) => sum + t.amount, 0);
+    .filter((t: Transaction) => t.type === "income")
+    .reduce((sum: number, t: Transaction) => sum + t.amount, 0);
 
   const totalExpenses = transactions
-    .filter((t: any) => t.type === "expense")
-    .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
+    .filter((t: Transaction) => t.type === "expense")
+    .reduce((sum: number, t: Transaction) => sum + Math.abs(t.amount), 0);
 
   const netBalance = totalIncome - totalExpenses;
-  const currentBudget = (session?.user?.budgetInitial || 0) + netBalance;
+  const currentBudget = userBudgetInitial + netBalance;
 
   const recentTransactions = transactions
-    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
   if (!session) {
@@ -82,9 +116,9 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Vue d'ensemble de vos finances
-          </p>
+            <p className="text-muted-foreground">
+              Vue d&apos;ensemble de vos finances
+            </p>
         </div>
         <div className="flex space-x-2">
           <Button asChild>
@@ -112,7 +146,7 @@ export default function DashboardPage() {
               €{currentBudget.toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Budget initial: €{(session.user.budgetInitial || 0).toFixed(2)}
+              Budget initial: €{userBudgetInitial.toFixed(2)}
             </p>
           </CardContent>
         </Card>
@@ -127,7 +161,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">€{totalIncome.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              {transactions.filter((t: any) => t.type === "income").length} transaction(s)
+              {transactions.filter((t: Transaction) => t.type === "income").length} transaction(s)
             </p>
           </CardContent>
         </Card>
@@ -142,7 +176,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">€{totalExpenses.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              {transactions.filter((t: any) => t.type === "expense").length} transaction(s)
+              {transactions.filter((t: Transaction) => t.type === "expense").length} transaction(s)
             </p>
           </CardContent>
         </Card>
@@ -197,13 +231,13 @@ export default function DashboardPage() {
               Historique
             </CardTitle>
             <CardDescription>
-              Consulter l'historique complet
+              Consulter l&apos;historique complet
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild variant="outline" className="w-full">
               <Link href="/history">
-                Voir l'historique
+                Voir l&apos;historique
               </Link>
             </Button>
           </CardContent>
@@ -249,7 +283,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {recentTransactions.map((transaction: any) => (
+              {recentTransactions.map((transaction: Transaction) => (
                 <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex items-center space-x-3">
                     {transaction.type === "income" ? (

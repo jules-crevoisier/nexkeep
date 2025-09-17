@@ -185,7 +185,7 @@ export function ReimbursementRequestForm({ onSuccess, onCancel }: ReimbursementR
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description de l'achat *</Label>
+            <Label htmlFor="description">Description de l&apos;achat *</Label>
             <Textarea
               id="description"
               name="description"

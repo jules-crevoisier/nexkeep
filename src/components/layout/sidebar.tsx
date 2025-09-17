@@ -17,7 +17,6 @@ import {
   LogOut,
   Menu,
   X,
-  Wallet,
   TrendingUp,
   TrendingDown,
   Calendar,
@@ -68,37 +67,63 @@ export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [transactions, setTransactions] = useState([]);
+  const [initialBudget, setInitialBudget] = useState(0);
 
   const toggleSidebar = () => setIsOpen(!isOpen);
 
-  const fetchTransactions = async () => {
+  const fetchUserData = async () => {
     try {
-      const response = await fetch("/api/transactions");
-      if (response.ok) {
-        const data = await response.json();
-        setTransactions(data);
+      // Récupérer les transactions
+      const transactionsResponse = await fetch("/api/transactions");
+      if (transactionsResponse.ok) {
+        const transactionsData = await transactionsResponse.json();
+        setTransactions(transactionsData);
+      }
+
+      // Récupérer le profil utilisateur (budget initial)
+      const userResponse = await fetch("/api/user/profile");
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        setInitialBudget(userData.budgetInitial || 0);
       }
     } catch (error) {
-      console.error("Error fetching transactions:", error);
+      console.error("Error fetching user data:", error);
     }
   };
 
   useEffect(() => {
     if (session) {
-      fetchTransactions();
+      fetchUserData();
     }
+  }, [session]);
+
+  // Écouter les mises à jour du budget initial
+  useEffect(() => {
+    const handleBudgetUpdate = (event: CustomEvent) => {
+      if (session) {
+        // Mettre à jour le budget initial
+        setInitialBudget(event.detail.newBudget);
+      }
+    };
+
+    window.addEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
+    };
   }, [session]);
 
   // Calculer les statistiques
   const totalIncome = transactions
-    .filter((t: any) => t.type === "income")
-    .reduce((sum: number, t: any) => sum + t.amount, 0);
+    .filter((t: { type: string; amount: number }) => t.type === "income")
+    .reduce((sum: number, t: { type: string; amount: number }) => sum + t.amount, 0);
 
   const totalExpenses = transactions
-    .filter((t: any) => t.type === "expense")
-    .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
+    .filter((t: { type: string; amount: number }) => t.type === "expense")
+    .reduce((sum: number, t: { type: string; amount: number }) => sum + Math.abs(t.amount), 0);
 
   const netBalance = totalIncome - totalExpenses;
+  const currentBudget = initialBudget + netBalance;
 
   return (
     <>
@@ -157,7 +182,7 @@ export function Sidebar() {
                     {session.user.email}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Budget: €{session.user.budget?.toFixed(2) || "0.00"}
+                    Budget: €{currentBudget.toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -211,12 +236,18 @@ export function Sidebar() {
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center space-x-2">
                     <Calendar className="h-4 w-4 text-blue-600" />
-                    <span className="text-muted-foreground">Solde</span>
+                    <span className="text-muted-foreground">Budget Actuel</span>
                   </div>
-                  <span className={`font-medium ${netBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    €{netBalance.toFixed(2)}
+                  <span className={`font-medium ${currentBudget >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    €{currentBudget.toFixed(2)}
                   </span>
                 </div>
+                {initialBudget > 0 && (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Budget initial: €{initialBudget.toFixed(2)}</span>
+                    <span>Solde net: €{netBalance.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}

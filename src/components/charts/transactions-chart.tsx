@@ -10,8 +10,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -125,12 +123,20 @@ export function TransactionsChart({ transactions, initialBudget }: TransactionsC
   const categoryChartData = categoryData();
   const pieChartData = pieData();
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: {
+    active?: boolean;
+    payload?: Array<{
+      color: string;
+      name: string;
+      value: number;
+    }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
           <p className="font-medium">{label}</p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry: { color: string; name: string; value: number }, index: number) => (
             <p key={index} style={{ color: entry.color }} className="text-sm">
               {entry.name}: €{entry.value.toFixed(2)}
             </p>
@@ -159,7 +165,7 @@ export function TransactionsChart({ transactions, initialBudget }: TransactionsC
           </TabsTrigger>
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <PieChartIcon className="h-4 w-4" />
-            Vue d'ensemble
+            Vue d&apos;ensemble
           </TabsTrigger>
         </TabsList>
 
@@ -242,7 +248,7 @@ export function TransactionsChart({ transactions, initialBudget }: TransactionsC
         <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Vue d'Ensemble</CardTitle>
+              <CardTitle>Vue d&apos;Ensemble</CardTitle>
               <CardDescription>
                 Répartition revenus vs dépenses
               </CardDescription>

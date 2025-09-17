@@ -66,7 +66,22 @@ export default function EditInvoicePage() {
     }
   };
 
-  const handleSave = async (invoiceData: any) => {
+  const handleSave = async (invoiceData: {
+    organisationId: string;
+    clientId: string;
+    date?: string;
+    dueDate?: string;
+    status?: string;
+    notes?: string;
+    paymentTerms?: string;
+    items: Array<{
+      description: string;
+      quantity: number;
+      unitPrice: number;
+      tvaRate: number;
+      articleId?: string;
+    }>;
+  }) => {
     try {
       const response = await fetch(`/api/invoices/${params.id}`, {
         method: 'PUT',

@@ -6,8 +6,9 @@ import { prisma } from '@/lib/prisma'
 // GET - Récupérer une demande de remboursement spécifique
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions)
     
@@ -17,7 +18,7 @@ export async function GET(
 
     const request_data = await prisma.reimbursementRequest.findFirst({
       where: {
-        id: params.id,
+        id: id,
         userId: session.user.id
       },
       include: {
@@ -45,8 +46,9 @@ export async function GET(
 // PUT - Mettre à jour une demande de remboursement
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions)
     
@@ -60,7 +62,7 @@ export async function PUT(
     // Vérifier que la demande existe et appartient à l'utilisateur
     const existingRequest = await prisma.reimbursementRequest.findFirst({
       where: {
-        id: params.id,
+        id: id,
         userId: session.user.id
       }
     })
@@ -81,7 +83,7 @@ export async function PUT(
     }
 
     const updatedRequest = await prisma.reimbursementRequest.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         ...(requesterName && { requesterName }),
         ...(requesterEmail !== undefined && { requesterEmail }),
@@ -110,8 +112,9 @@ export async function PUT(
 // DELETE - Supprimer une demande de remboursement
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions)
     
@@ -122,7 +125,7 @@ export async function DELETE(
     // Vérifier que la demande existe et appartient à l'utilisateur
     const existingRequest = await prisma.reimbursementRequest.findFirst({
       where: {
-        id: params.id,
+        id: id,
         userId: session.user.id
       }
     })
@@ -135,7 +138,7 @@ export async function DELETE(
     }
 
     await prisma.reimbursementRequest.delete({
-      where: { id: params.id }
+      where: { id: id }
     })
 
     return NextResponse.json({ message: 'Demande supprimée avec succès' })

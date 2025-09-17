@@ -7,8 +7,9 @@ import { generateInvoicePDF } from '@/lib/invoice-pdf';
 // GET /api/invoices/[id]/pdf - Générer le PDF de la facture
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -17,7 +18,7 @@ export async function GET(
 
     const invoice = await prisma.invoice.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       },
       include: {
@@ -39,7 +40,7 @@ export async function GET(
     const pdfBuffer = await generateInvoicePDF(invoice);
 
     // Retourner le PDF
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as BodyInit, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="facture-${invoice.number}.pdf"`,

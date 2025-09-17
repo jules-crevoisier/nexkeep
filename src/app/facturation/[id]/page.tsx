@@ -313,7 +313,7 @@ export default function InvoiceDetailPage() {
                 <span>{new Date(invoice.date).toLocaleDateString('fr-FR')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Date d'échéance:</span>
+                <span className="text-muted-foreground">Date d&apos;échéance:</span>
                 <span>{new Date(invoice.dueDate).toLocaleDateString('fr-FR')}</span>
               </div>
             </CardContent>

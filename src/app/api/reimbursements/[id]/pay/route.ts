@@ -6,8 +6,9 @@ import { prisma } from '@/lib/prisma'
 // POST - Enregistrer un remboursement
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions)
     
@@ -21,7 +22,7 @@ export async function POST(
     // Vérifier que la demande existe et appartient à l'utilisateur
     const reimbursementRequest = await prisma.reimbursementRequest.findFirst({
       where: {
-        id: params.id,
+        id: id,
         userId: session.user.id
       }
     })
@@ -58,14 +59,14 @@ export async function POST(
           transferDate: transferDate ? new Date(transferDate) : null,
           reference,
           notes,
-          requestId: params.id,
+          requestId: id,
           userId: session.user.id
         }
       })
 
       // Mettre à jour le statut de la demande
       await tx.reimbursementRequest.update({
-        where: { id: params.id },
+        where: { id: id },
         data: { status: 'paid' }
       })
 

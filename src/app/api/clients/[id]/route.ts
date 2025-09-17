@@ -6,8 +6,9 @@ import { prisma } from '@/lib/prisma';
 // GET /api/clients/[id] - Récupérer un client spécifique
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -16,7 +17,7 @@ export async function GET(
 
     const client = await prisma.client.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -35,8 +36,9 @@ export async function GET(
 // PUT /api/clients/[id] - Mettre à jour un client
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -48,7 +50,7 @@ export async function PUT(
     // Vérifier que le client appartient à l'utilisateur
     const existingClient = await prisma.client.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -58,7 +60,7 @@ export async function PUT(
     }
 
     const client = await prisma.client.update({
-      where: { id: params.id },
+      where: { id: id },
       data
     });
 
@@ -72,8 +74,9 @@ export async function PUT(
 // DELETE /api/clients/[id] - Supprimer un client
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -83,7 +86,7 @@ export async function DELETE(
     // Vérifier que le client appartient à l'utilisateur
     const existingClient = await prisma.client.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -93,7 +96,7 @@ export async function DELETE(
     }
 
     await prisma.client.delete({
-      where: { id: params.id }
+      where: { id: id }
     });
 
     return NextResponse.json({ message: 'Client supprimé avec succès' });

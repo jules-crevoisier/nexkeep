@@ -6,8 +6,9 @@ import { prisma } from '@/lib/prisma';
 // GET /api/organisations/[id] - Récupérer une organisation spécifique
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -16,7 +17,7 @@ export async function GET(
 
     const organisation = await prisma.organisation.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -35,8 +36,9 @@ export async function GET(
 // PUT /api/organisations/[id] - Mettre à jour une organisation
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -48,7 +50,7 @@ export async function PUT(
     // Vérifier que l'organisation appartient à l'utilisateur
     const existingOrganisation = await prisma.organisation.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -58,7 +60,7 @@ export async function PUT(
     }
 
     const organisation = await prisma.organisation.update({
-      where: { id: params.id },
+      where: { id: id },
       data
     });
 
@@ -72,8 +74,9 @@ export async function PUT(
 // DELETE /api/organisations/[id] - Supprimer une organisation
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -83,7 +86,7 @@ export async function DELETE(
     // Vérifier que l'organisation appartient à l'utilisateur
     const existingOrganisation = await prisma.organisation.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         userId: session.user.id 
       }
     });
@@ -93,7 +96,7 @@ export async function DELETE(
     }
 
     await prisma.organisation.delete({
-      where: { id: params.id }
+      where: { id: id }
     });
 
     return NextResponse.json({ message: 'Organisation supprimée avec succès' });

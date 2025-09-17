@@ -24,7 +24,22 @@ export default function FacturationPage() {
     setShowInvoiceForm(true);
   };
 
-  const handleSaveInvoice = async (invoiceData: any) => {
+  const handleSaveInvoice = async (invoiceData: {
+    organisationId: string;
+    clientId: string;
+    date?: string;
+    dueDate?: string;
+    status?: string;
+    notes?: string;
+    paymentTerms?: string;
+    items: Array<{
+      description: string;
+      quantity: number;
+      unitPrice: number;
+      tvaRate: number;
+      articleId?: string;
+    }>;
+  }) => {
     try {
       const response = await fetch('/api/invoices', {
         method: 'POST',

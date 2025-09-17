@@ -48,7 +48,7 @@ interface CategorySelectorProps {
   type: "income" | "expense";
 }
 
-const iconMap: { [key: string]: any } = {
+const iconMap: { [key: string]: React.ComponentType<{ className?: string }> } = {
   Briefcase,
   Laptop,
   TrendingUp,

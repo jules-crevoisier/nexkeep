@@ -69,10 +69,29 @@ interface InvoiceItem {
 }
 
 interface InvoiceFormProps {
-  onSave: (invoiceData: any) => void;
+  onSave: (invoiceData: {
+    organisationId: string;
+    clientId: string;
+    date?: string;
+    dueDate?: string;
+    status?: string;
+    notes?: string;
+    paymentTerms?: string;
+    items: InvoiceItem[];
+  }) => void;
   onCancel: () => void;
   isLoading?: boolean;
-  initialData?: any;
+  initialData?: {
+    id?: string;
+    organisationId?: string;
+    clientId?: string;
+    date?: string;
+    dueDate?: string;
+    status?: string;
+    notes?: string;
+    paymentTerms?: string;
+    items?: InvoiceItem[];
+  };
 }
 
 export function InvoiceForm({ onSave, onCancel, isLoading = false, initialData }: InvoiceFormProps) {
@@ -171,6 +190,9 @@ export function InvoiceForm({ onSave, onCancel, isLoading = false, initialData }
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           tvaRate: item.tvaRate,
+          subtotal: item.quantity * item.unitPrice,
+          tvaAmount: (item.quantity * item.unitPrice) * (item.tvaRate / 100),
+          total: (item.quantity * item.unitPrice) * (1 + item.tvaRate / 100),
           articleId: item.articleId
         }))
       });
@@ -328,7 +350,7 @@ export function InvoiceForm({ onSave, onCancel, isLoading = false, initialData }
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="dueDate">Date d'échéance</Label>
+                <Label htmlFor="dueDate">Date d&apos;échéance</Label>
                 <Input
                   id="dueDate"
                   type="date"

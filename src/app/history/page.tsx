@@ -9,7 +9,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Calendar,
-  Tag,
   FileText,
   Table as TableIcon
 } from "lucide-react";
@@ -40,13 +39,13 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { CategorySelector } from "@/components/forms/category-selector";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { Transaction, TransactionWithBudget, Category } from "@/types";
 
 export default function HistoryPage() {
   const { data: session } = useSession();
-  const [transactions, setTransactions] = useState([]);
-  const [filteredTransactions, setFilteredTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
@@ -54,7 +53,7 @@ export default function HistoryPage() {
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [initialBudget, setInitialBudget] = useState(0);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
 
   const fetchUserData = async () => {
@@ -96,21 +95,21 @@ export default function HistoryPage() {
     let filtered = transactions;
 
     if (searchTerm) {
-      filtered = filtered.filter((transaction: any) =>
+      filtered = filtered.filter((transaction: Transaction) =>
         transaction.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         transaction.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     if (typeFilter !== "all") {
-      filtered = filtered.filter((transaction: any) => transaction.type === typeFilter);
+      filtered = filtered.filter((transaction: Transaction) => transaction.type === typeFilter);
     }
 
     // Filtrage par catégorie
     if (selectedCategory && selectedCategory !== "all") {
-      const selectedCategoryData = categories.find((cat: any) => cat.id === selectedCategory);
+      const selectedCategoryData = categories.find((cat: Category) => cat.id === selectedCategory);
       if (selectedCategoryData) {
-        filtered = filtered.filter((transaction: any) => transaction.category === selectedCategoryData.name);
+        filtered = filtered.filter((transaction: Transaction) => transaction.category === selectedCategoryData.name);
       }
     }
 
@@ -119,7 +118,7 @@ export default function HistoryPage() {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
-      filtered = filtered.filter((transaction: any) => {
+      filtered = filtered.filter((transaction: Transaction) => {
         const transactionDate = new Date(transaction.date);
         
         switch (dateFilter) {
@@ -155,22 +154,22 @@ export default function HistoryPage() {
   }, [transactions, searchTerm, typeFilter, dateFilter, startDate, endDate, selectedCategory, categories]);
 
   const totalIncome = transactions
-    .filter((t: any) => t.type === "income")
-    .reduce((sum: number, t: any) => sum + t.amount, 0);
+    .filter((t: Transaction) => t.type === "income")
+    .reduce((sum: number, t: Transaction) => sum + t.amount, 0);
 
   const totalExpenses = transactions
-    .filter((t: any) => t.type === "expense")
-    .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
+    .filter((t: Transaction) => t.type === "expense")
+    .reduce((sum: number, t: Transaction) => sum + Math.abs(t.amount), 0);
 
   const netBalance = totalIncome - totalExpenses;
 
   // Calculer le budget après chaque transaction pour l'affichage
-  const sortedTransactionsForDisplay = [...filteredTransactions].sort((a: any, b: any) => 
+  const sortedTransactionsForDisplay = [...filteredTransactions].sort((a: Transaction, b: Transaction) => 
     new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
   let currentBudget = initialBudget;
-  const transactionsWithBudget = sortedTransactionsForDisplay.map((t: any) => {
+  const transactionsWithBudget: TransactionWithBudget[] = sortedTransactionsForDisplay.map((t: Transaction) => {
     // Ajouter les revenus et soustraire les dépenses
     if (t.type === "income") {
       currentBudget += t.amount;
@@ -186,13 +185,13 @@ export default function HistoryPage() {
 
   const exportToXLSX = () => {
     // Trier les transactions par date pour l'export
-    const sortedTransactions = [...filteredTransactions].sort((a: any, b: any) => 
+    const sortedTransactions = [...filteredTransactions].sort((a: Transaction, b: Transaction) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
     // Calculer le budget après chaque transaction pour l'export
     let currentBudgetExport = initialBudget;
-    const transactionsWithBudgetExport = sortedTransactions.map((t: any) => {
+    const transactionsWithBudgetExport = sortedTransactions.map((t: Transaction) => {
       if (t.type === "income") {
         currentBudgetExport += t.amount;
       } else {
@@ -208,7 +207,7 @@ export default function HistoryPage() {
     // Préparer les données pour Excel
     const worksheetData = [
       ["Nom", "Type", "Montant (€)", "Description", "Catégorie", "Date", "Heure", "Budget Après Transaction (€)"], // En-têtes
-      ...transactionsWithBudgetExport.map((t: any) => [
+      ...transactionsWithBudgetExport.map((t: TransactionWithBudget) => [
         t.name,
         t.type === "income" ? "Revenu" : "Dépense",
         parseFloat(t.amount.toFixed(2)), // Nombre pour Excel
@@ -299,13 +298,13 @@ export default function HistoryPage() {
     doc.text(`Total: ${filteredTransactions.length} transaction(s)`, 14, 42);
     
     // Trier les transactions par date pour le PDF
-    const sortedTransactionsPDF = [...filteredTransactions].sort((a: any, b: any) => 
+    const sortedTransactionsPDF = [...filteredTransactions].sort((a: Transaction, b: Transaction) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
     // Calculer le budget après chaque transaction pour le PDF
     let currentBudgetPDF = initialBudget;
-    const transactionsWithBudgetPDF = sortedTransactionsPDF.map((t: any) => {
+    const transactionsWithBudgetPDF = sortedTransactionsPDF.map((t: Transaction) => {
       if (t.type === "income") {
         currentBudgetPDF += t.amount;
       } else {
@@ -319,7 +318,7 @@ export default function HistoryPage() {
     });
     
     // Tableau des transactions
-    const tableData = transactionsWithBudgetPDF.map((t: any) => [
+    const tableData = transactionsWithBudgetPDF.map((t: TransactionWithBudget) => [
       t.name,
       t.type === "income" ? "Revenu" : "Dépense",
       `€${t.amount.toFixed(2)}`,
@@ -370,7 +369,7 @@ export default function HistoryPage() {
 
   const getDateRangeText = () => {
     switch (dateFilter) {
-      case "today": return "Aujourd'hui";
+      case "today": return "Aujourd&apos;hui";
       case "week": return "Cette semaine";
       case "month": return "Ce mois";
       case "year": return "Cette année";
@@ -428,7 +427,7 @@ export default function HistoryPage() {
                 €{initialBudget.toFixed(2)}
               </span>
               <span className="text-xs text-muted-foreground">
-                (Défini lors de l'inscription)
+                (Défini lors de l&apos;inscription)
               </span>
             </div>
 
@@ -462,7 +461,7 @@ export default function HistoryPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes les catégories</SelectItem>
-                  {categories.map((category: any) => (
+                  {categories.map((category: Category) => (
                     <SelectItem key={category.id} value={category.id}>
                       <div className="flex items-center space-x-2">
                         <div 
@@ -484,7 +483,7 @@ export default function HistoryPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes les dates</SelectItem>
-                  <SelectItem value="today">Aujourd'hui</SelectItem>
+                  <SelectItem value="today">Aujourd&apos;hui</SelectItem>
                   <SelectItem value="week">Cette semaine</SelectItem>
                   <SelectItem value="month">Ce mois</SelectItem>
                   <SelectItem value="year">Cette année</SelectItem>
@@ -527,7 +526,7 @@ export default function HistoryPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">€{totalIncome.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              {transactions.filter((t: any) => t.type === "income").length} transaction(s)
+              {transactions.filter((t: Transaction) => t.type === "income").length} transaction(s)
             </p>
           </CardContent>
         </Card>
@@ -542,7 +541,7 @@ export default function HistoryPage() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">€{totalExpenses.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              {transactions.filter((t: any) => t.type === "expense").length} transaction(s)
+              {transactions.filter((t: Transaction) => t.type === "expense").length} transaction(s)
             </p>
           </CardContent>
         </Card>
@@ -599,7 +598,7 @@ export default function HistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactionsWithBudget.map((transaction: any) => (
+                {transactionsWithBudget.map((transaction: TransactionWithBudget) => (
                   <TableRow key={transaction.id}>
                     <TableCell>
                       <div className="flex items-center space-x-2">
@@ -636,7 +635,7 @@ export default function HistoryPage() {
                       {transaction.category ? (
                         <div className="flex items-center space-x-2">
                           {(() => {
-                            const categoryData = categories.find((cat: any) => cat.name === transaction.category);
+                            const categoryData = categories.find((cat: Category) => cat.name === transaction.category);
                             return categoryData ? (
                               <>
                                 <div 
