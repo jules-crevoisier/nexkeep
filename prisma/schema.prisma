@@ -1,0 +1,219 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  budget        Float    @default(0)
+  budgetInitial Float    @default(0)
+  shareToken    String?  @unique // Token unique pour partager le formulaire
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  transactions Transaction[]
+  reimbursementRequests ReimbursementRequest[]
+  reimbursements Reimbursement[]
+  organisations Organisation[]
+  clients Client[]
+  articles Article[]
+  invoices Invoice[]
+  
+  @@map("users")
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  name        String   // Nom de la transaction
+  amount      Float
+  type        String   // "income" ou "expense"
+  description String?
+  category    String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("transactions")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  type        String   // "income" ou "expense"
+  color       String?  // Couleur hexadécimale
+  icon        String?  // Nom de l'icône Lucide
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("categories")
+}
+
+model ReimbursementRequest {
+  id          String   @id @default(cuid())
+  requesterName String  // Nom de la personne qui demande le remboursement
+  requesterEmail String? // Email de contact
+  amount      Float    // Montant à rembourser
+  description String   // Description de l'achat
+  status      String   @default("pending") // "pending", "approved", "rejected", "paid"
+  receiptUrl  String?  // URL de la facture (fichier uploadé)
+  ribUrl      String?  // URL du RIB (fichier uploadé)
+  notes       String?  // Notes internes
+  isPublicRequest Boolean @default(false) // Indique si la demande vient du formulaire public
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  reimbursements Reimbursement[]
+  
+  @@map("reimbursement_requests")
+}
+
+model Reimbursement {
+  id          String   @id @default(cuid())
+  amount      Float    // Montant remboursé
+  method      String   // "transfer", "cash", "check"
+  transferDate DateTime? // Date du virement
+  reference   String?  // Référence du virement
+  notes       String?  // Notes sur le remboursement
+  createdAt   DateTime @default(now())
+  
+  requestId String
+  request   ReimbursementRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("reimbursements")
+}
+
+// Modèles pour la facturation
+model Organisation {
+  id          String   @id @default(cuid())
+  name        String   // Nom de l'organisation
+  address     String   // Adresse complète
+  city        String   // Ville
+  postalCode  String   // Code postal
+  country     String   @default("France")
+  siret       String?  // Numéro SIRET
+  tvaNumber   String?  // Numéro de TVA intracommunautaire
+  phone       String?  // Téléphone
+  email       String?  // Email
+  website     String?  // Site web
+  logo        String?  // URL du logo
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  invoices Invoice[]
+  
+  @@map("organisations")
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String   // Nom ou raison sociale
+  firstName   String?  // Prénom (si personne physique)
+  lastName    String?  // Nom de famille (si personne physique)
+  company     String?  // Entreprise
+  address     String?  // Adresse
+  city        String?  // Ville
+  postalCode  String?  // Code postal
+  country     String?  // Pays
+  email       String?  // Email
+  phone       String?  // Téléphone
+  siret       String?  // Numéro SIRET (si entreprise)
+  tvaNumber   String?  // Numéro de TVA intracommunautaire
+  notes       String?  // Notes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  invoices Invoice[]
+  
+  @@map("clients")
+}
+
+model Article {
+  id          String   @id @default(cuid())
+  name        String   // Nom de l'article/service
+  description String?  // Description détaillée
+  price       Float    // Prix unitaire HT
+  tvaRate     Float    @default(20.0) // Taux de TVA (en %)
+  unit        String   @default("unité") // Unité (pièce, heure, kg, etc.)
+  category    String?  // Catégorie
+  isActive    Boolean  @default(true) // Article actif
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  invoiceItems InvoiceItem[]
+  
+  @@map("articles")
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  number      String   // Numéro de facture
+  date        DateTime @default(now()) // Date de facturation
+  dueDate     DateTime // Date d'échéance
+  status      String   @default("draft") // "draft", "sent", "paid", "cancelled"
+  subtotal    Float    // Montant HT
+  tvaAmount   Float    // Montant de la TVA
+  total       Float    // Montant TTC
+  notes       String?  // Notes
+  paymentTerms String? // Conditions de paiement
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  items InvoiceItem[]
+  
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  description String   // Description de la ligne
+  quantity    Float    // Quantité
+  unitPrice   Float    // Prix unitaire HT
+  tvaRate     Float    // Taux de TVA
+  subtotal    Float    // Sous-total HT
+  tvaAmount   Float    // Montant TVA
+  total       Float    // Total TTC
+  createdAt   DateTime @default(now())
+  
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  articleId String?
+  article   Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  
+  @@map("invoice_items")
+}
