@@ -1,67 +1,62 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { writeFile } from 'fs/promises'
-import { join } from 'path'
-import { existsSync, mkdirSync } from 'fs'
+import { NextRequest, NextResponse } from "next/server";
+import { put } from "@vercel/blob";
 
-export async function POST(request: NextRequest) {
+export const runtime = "nodejs"; // nécessaire pour le SDK côté serveur
+
+export async function POST(req: NextRequest) {
   try {
-    const data = await request.formData()
-    const file: File | null = data.get('file') as unknown as File
-
+    const form = await req.formData();
+    const file = form.get("file") as File | null;
+    
     if (!file) {
-      return NextResponse.json({ error: 'Aucun fichier fourni' }, { status: 400 })
+      return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
     }
 
     // Vérifier le type de fichier
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json({ 
         error: 'Type de fichier non autorisé. Formats acceptés: JPG, PNG, PDF' 
-      }, { status: 400 })
+      }, { status: 400 });
     }
 
     // Vérifier la taille du fichier (max 10MB)
-    const maxSize = 10 * 1024 * 1024 // 10MB
+    const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
       return NextResponse.json({ 
         error: 'Fichier trop volumineux. Taille maximale: 10MB' 
-      }, { status: 400 })
+      }, { status: 400 });
     }
 
-    // Créer le dossier uploads s'il n'existe pas
-    const uploadsDir = join(process.cwd(), 'public', 'uploads')
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true })
-    }
+    // Générer une clé unique pour le fichier
+    const origName = file.name || "file";
+    const ext = origName.includes(".") ? origName.split(".").pop() : "";
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).slice(2);
+    const key = `uploads/${timestamp}_${randomString}${ext ? "." + ext : ""}`;
 
-    // Générer un nom de fichier unique
-    const timestamp = Date.now()
-    const randomString = Math.random().toString(36).substring(2, 15)
-    const fileExtension = file.name.split('.').pop()
-    const fileName = `${timestamp}_${randomString}.${fileExtension}`
-    
-    const filePath = join(uploadsDir, fileName)
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    // Envoi direct vers Vercel Blob (public)
+    const { url } = await put(key, file, {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: file.type || "application/octet-stream",
+    });
 
-    await writeFile(filePath, buffer)
-
-    // Retourner l'URL publique du fichier
-    const fileUrl = `/uploads/${fileName}`
-
+    // Retourner l'URL publique à stocker en base (compatible avec l'ancien format)
     return NextResponse.json({ 
       success: true, 
-      fileUrl,
+      fileUrl: url,  // URL publique Vercel Blob
+      url: url,      // Alias pour compatibilité
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type
-    })
+    }, { status: 200 });
 
-  } catch (error) {
-    console.error('Erreur lors de l\'upload:', error)
+  } catch (err: any) {
+    console.error("Upload error:", err);
     return NextResponse.json({ 
-      error: 'Erreur lors de l\'upload du fichier' 
-    }, { status: 500 })
+      error: err?.message || "Erreur lors de l'upload du fichier" 
+    }, { status: 500 });
   }
 }
 

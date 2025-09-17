@@ -18,7 +18,13 @@
 - PlanetScale : https://planetscale.com
 - Railway : https://railway.app
 
-## ⚙️ Étape 2 : Variables d'environnement
+## ⚙️ Étape 2 : Configuration Vercel Storage
+
+### A. Activer Vercel Blob
+1. Dans votre projet Vercel → **Storage** → **Create Database** → **Blob**
+2. Copiez le token `BLOB_READ_WRITE_TOKEN` généré
+
+### B. Variables d'environnement
 
 Dans Vercel, ajoutez ces variables :
 
@@ -26,6 +32,7 @@ Dans Vercel, ajoutez ces variables :
 DATABASE_URL=postgresql://...
 NEXTAUTH_URL=https://votre-app.vercel.app
 NEXTAUTH_SECRET=un-secret-de-32-caracteres-minimum
+BLOB_READ_WRITE_TOKEN=vercel_blob_rw_XXXXXXXXXX
 RESEND_API_KEY=votre-cle-resend
 RESEND_FROM=NexKeep <noreply@yourdomain.com>
 ADMIN_EMAIL=admin@yourdomain.com
