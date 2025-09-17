@@ -170,12 +170,8 @@ export default function HistoryPage() {
 
   let currentBudget = initialBudget;
   const transactionsWithBudget: TransactionWithBudget[] = sortedTransactionsForDisplay.map((t: Transaction) => {
-    // Ajouter les revenus et soustraire les dépenses
-    if (t.type === "income") {
-      currentBudget += t.amount;
-    } else {
-      currentBudget -= t.amount;
-    }
+    // Les montants sont déjà signés (positifs pour revenus, négatifs pour dépenses)
+    currentBudget += t.amount;
     
     return {
       ...t,
@@ -192,11 +188,8 @@ export default function HistoryPage() {
     // Calculer le budget après chaque transaction pour l'export
     let currentBudgetExport = initialBudget;
     const transactionsWithBudgetExport = sortedTransactions.map((t: Transaction) => {
-      if (t.type === "income") {
-        currentBudgetExport += t.amount;
-      } else {
-        currentBudgetExport -= t.amount;
-      }
+      // Les montants sont déjà signés (positifs pour revenus, négatifs pour dépenses)
+      currentBudgetExport += t.amount;
       
       return {
         ...t,
@@ -305,11 +298,8 @@ export default function HistoryPage() {
     // Calculer le budget après chaque transaction pour le PDF
     let currentBudgetPDF = initialBudget;
     const transactionsWithBudgetPDF = sortedTransactionsPDF.map((t: Transaction) => {
-      if (t.type === "income") {
-        currentBudgetPDF += t.amount;
-      } else {
-        currentBudgetPDF -= t.amount;
-      }
+      // Les montants sont déjà signés (positifs pour revenus, négatifs pour dépenses)
+      currentBudgetPDF += t.amount;
       
       return {
         ...t,

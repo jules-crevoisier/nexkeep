@@ -186,14 +186,6 @@ export function CategorySelector({ selectedCategory, onCategoryChange, type }: C
           <Plus className="h-4 w-4 mr-2" />
           Ajouter une catégorie
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => fetch("/api/categories/seed", { method: "POST" })}
-        >
-          Initialiser les catégories par défaut
-        </Button>
       </div>
 
       {showAddForm && (
