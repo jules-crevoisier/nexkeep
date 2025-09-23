@@ -17,7 +17,8 @@ export default withAuth(
           "/register",
           "/request-reimbursement",
           "/api/auth",
-          "/api/public"
+          "/api/public",
+          "/api/upload"  // Nécessaire pour les formulaires externes
         ];
         
         // Vérifier si la route est publique
@@ -46,11 +47,12 @@ export const config = {
      * Match all request paths except for the ones starting with:
      * - api/auth (NextAuth routes)
      * - api/public (public API routes)
+     * - api/upload (file upload for external forms)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!api/auth|api/public|_next/static|_next/image|favicon.ico|public).*)",
+    "/((?!api/auth|api/public|api/upload|_next/static|_next/image|favicon.ico|public).*)",
   ],
 };
