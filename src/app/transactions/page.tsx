@@ -64,6 +64,8 @@ export default function TransactionsPage() {
         if (data.newBudget !== undefined) {
           setBudget(data.newBudget);
         }
+        // Émettre l'événement pour synchroniser les autres composants
+        window.dispatchEvent(new CustomEvent('budgetUpdated'));
       }
     } catch (error) {
       console.error("Error adding income:", error);
@@ -110,6 +112,8 @@ export default function TransactionsPage() {
         if (data.newBudget !== undefined) {
           setBudget(data.newBudget);
         }
+        // Émettre l'événement pour synchroniser les autres composants
+        window.dispatchEvent(new CustomEvent('budgetUpdated'));
       }
     } catch (error) {
       console.error("Error adding expense:", error);
@@ -146,6 +150,34 @@ export default function TransactionsPage() {
     if (session) {
       fetchBudget();
     }
+  }, [session]);
+
+  // Écouter les événements de mise à jour du budget
+  useEffect(() => {
+    const handleBudgetUpdate = () => {
+      fetchBudget();
+    };
+
+    window.addEventListener('budgetUpdated', handleBudgetUpdate);
+    
+    return () => {
+      window.removeEventListener('budgetUpdated', handleBudgetUpdate);
+    };
+  }, []);
+
+  // Rafraîchir le budget quand la page devient visible (retour depuis les paramètres)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && session) {
+        fetchBudget();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [session]);
 
   return (
