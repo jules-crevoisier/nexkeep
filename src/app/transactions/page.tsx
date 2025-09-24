@@ -28,7 +28,8 @@ import { AuthGuard } from "@/components/auth/auth-guard";
 
 export default function TransactionsPage() {
   const { data: session } = useSession();
-  const [budget, setBudget] = useState(0);
+  const [userBudgetInitial, setUserBudgetInitial] = useState(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // États pour les formulaires
@@ -38,6 +39,18 @@ export default function TransactionsPage() {
   // États pour la confirmation de dépense
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingExpense, setPendingExpense] = useState<{name: string, amount: string, description: string, category: string} | null>(null);
+
+  // Calcul du budget actuel
+  const totalIncome = transactions
+    .filter((t: any) => t.type === "income")
+    .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
+
+  const totalExpenses = transactions
+    .filter((t: any) => t.type === "expense")
+    .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
+
+  const netBalance = totalIncome - totalExpenses;
+  const currentBudget = userBudgetInitial + netBalance;
 
   const handleIncomeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,12 +71,9 @@ export default function TransactionsPage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
         setIncomeForm({ name: "", amount: "", description: "", category: "" });
-        // Mettre à jour le budget directement
-        if (data.newBudget !== undefined) {
-          setBudget(data.newBudget);
-        }
+        // Rafraîchir les données
+        await fetchAllData();
         // Émettre l'événement pour synchroniser les autres composants
         window.dispatchEvent(new CustomEvent('budgetUpdated'));
       }
@@ -80,7 +90,7 @@ export default function TransactionsPage() {
     const expenseAmount = parseFloat(expenseForm.amount);
     
     // Vérifier si la dépense dépasse le budget
-    if (expenseAmount > budget) {
+    if (expenseAmount > currentBudget) {
       setPendingExpense(expenseForm);
       setShowConfirmDialog(true);
       return;
@@ -106,12 +116,9 @@ export default function TransactionsPage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
         setExpenseForm({ name: "", amount: "", description: "", category: "" });
-        // Mettre à jour le budget directement
-        if (data.newBudget !== undefined) {
-          setBudget(data.newBudget);
-        }
+        // Rafraîchir les données
+        await fetchAllData();
         // Émettre l'événement pour synchroniser les autres composants
         window.dispatchEvent(new CustomEvent('budgetUpdated'));
       }
@@ -134,28 +141,44 @@ export default function TransactionsPage() {
     setShowConfirmDialog(false);
   };
 
-  const fetchBudget = async () => {
+  const fetchUserData = async () => {
     try {
-      const response = await fetch("/api/user/budget");
+      const response = await fetch("/api/user/profile");
       if (response.ok) {
         const data = await response.json();
-        setBudget(data.budget);
+        setUserBudgetInitial(data.budgetInitial || 0);
       }
     } catch (error) {
-      console.error("Error fetching budget:", error);
+      console.error("Error fetching user data:", error);
     }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      const response = await fetch("/api/transactions");
+      if (response.ok) {
+        const data = await response.json();
+        setTransactions(data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    }
+  };
+
+  const fetchAllData = async () => {
+    await Promise.all([fetchUserData(), fetchTransactions()]);
   };
 
   useEffect(() => {
     if (session) {
-      fetchBudget();
+      fetchAllData();
     }
   }, [session]);
 
   // Écouter les événements de mise à jour du budget
   useEffect(() => {
     const handleBudgetUpdate = () => {
-      fetchBudget();
+      fetchAllData();
     };
 
     window.addEventListener('budgetUpdated', handleBudgetUpdate);
@@ -165,11 +188,11 @@ export default function TransactionsPage() {
     };
   }, []);
 
-  // Rafraîchir le budget quand la page devient visible (retour depuis les paramètres)
+  // Rafraîchir les données quand la page devient visible (retour depuis les paramètres)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && session) {
-        fetchBudget();
+        fetchAllData();
       }
     };
 
@@ -195,9 +218,9 @@ export default function TransactionsPage() {
           <div className="text-right">
             <p className="text-sm text-muted-foreground">Budget actuel</p>
             <p className={`text-2xl font-bold ${
-              budget < 0 ? 'text-red-600' : 'text-green-600'
+              currentBudget < 0 ? 'text-red-600' : 'text-green-600'
             }`}>
-              €{budget.toFixed(2)}
+              €{currentBudget.toFixed(2)}
             </p>
           </div>
         </div>
@@ -326,7 +349,7 @@ export default function TransactionsPage() {
                 <span>Dépense importante</span>
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Cette dépense de <strong>€{pendingExpense?.amount}</strong> dépasse votre budget actuel de <strong>€{budget.toFixed(2)}</strong>.
+                Cette dépense de <strong>€{pendingExpense?.amount}</strong> dépasse votre budget actuel de <strong>€{currentBudget.toFixed(2)}</strong>.
                 <br /><br />
                 Votre solde sera négatif après cette transaction. Voulez-vous continuer ?
               </AlertDialogDescription>
