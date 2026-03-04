@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { parseAndValidateAmount } from '@/lib/api-utils'
 
 // POST - Enregistrer un remboursement
 export async function POST(
@@ -16,8 +17,22 @@ export async function POST(
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
-    const body = await request.json()
+    let body: { amount?: unknown; method?: string; transferDate?: string; reference?: string; notes?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Données JSON invalides' }, { status: 400 })
+    }
     const { amount, method, transferDate, reference, notes } = body
+
+    const amountValidation = parseAndValidateAmount(amount ?? '')
+    if (!amountValidation.valid) {
+      return NextResponse.json(
+        { error: amountValidation.error ?? 'Le montant doit être un nombre valide supérieur à 0' },
+        { status: 400 }
+      )
+    }
+    const parsedAmount = amountValidation.amount!
 
     // Vérifier que la demande existe et appartient à l'utilisateur
     const reimbursementRequest = await prisma.reimbursementRequest.findFirst({
@@ -34,15 +49,7 @@ export async function POST(
       )
     }
 
-    // Validation des données
-    if (!amount || amount <= 0) {
-      return NextResponse.json(
-        { error: 'Le montant doit être positif' },
-        { status: 400 }
-      )
-    }
-
-    if (!method) {
+    if (!method?.trim()) {
       return NextResponse.json(
         { error: 'La méthode de paiement est requise' },
         { status: 400 }
@@ -51,11 +58,10 @@ export async function POST(
 
     // Créer le remboursement et mettre à jour le statut de la demande
     const result = await prisma.$transaction(async (tx) => {
-      // Créer le remboursement
       const reimbursement = await tx.reimbursement.create({
         data: {
-          amount,
-          method,
+          amount: parsedAmount,
+          method: method.trim(),
           transferDate: transferDate ? new Date(transferDate) : null,
           reference,
           notes,
@@ -70,11 +76,10 @@ export async function POST(
         data: { status: 'paid' }
       })
 
-      // Créer une transaction de dépense pour le remboursement
       await tx.transaction.create({
         data: {
           name: `Remboursement - ${reimbursementRequest.requesterName}`,
-          amount: -amount, // Montant négatif pour une dépense
+          amount: -parsedAmount,
           type: 'expense',
           description: `Remboursement pour: ${reimbursementRequest.description}`,
           category: 'Remboursements',

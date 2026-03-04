@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { parseApiError } from "@/lib/api-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,13 +83,12 @@ export function ChangePasswordForm() {
         })
       });
 
-      const data = await response.json();
-
       if (response.ok) {
         setMessage({ type: 'success', text: 'Mot de passe modifié avec succès' });
         setFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });
       } else {
-        setMessage({ type: 'error', text: data.error || 'Erreur lors de la modification du mot de passe' });
+        const errorMessage = await parseApiError(response);
+        setMessage({ type: 'error', text: errorMessage });
       }
     } catch (error) {
       console.error("Password change error:", error);

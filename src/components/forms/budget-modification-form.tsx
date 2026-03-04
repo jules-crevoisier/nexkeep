@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { parseApiError } from '@/lib/api-utils'
+import { dispatchDataUpdated } from '@/lib/events'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -68,18 +70,13 @@ export function BudgetModificationForm({ currentBudget, onBudgetUpdated }: Budge
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erreur lors de la mise à jour')
+        const errorMessage = await parseApiError(response)
+        throw new Error(errorMessage)
       }
-
-      const data = await response.json()
       onBudgetUpdated(parseFloat(newBudget))
       setShowConfirmation(false)
       
-      // Émettre un événement personnalisé pour notifier les autres composants
-      window.dispatchEvent(new CustomEvent('budgetUpdated', { 
-        detail: { newBudget: parseFloat(newBudget) } 
-      }))
+      dispatchDataUpdated({ type: 'budget', newBudget: parseFloat(newBudget) })
       
       toast.success('Budget initial mis à jour avec succès', {
         description: `Nouveau budget: €${parseFloat(newBudget).toFixed(2)}`

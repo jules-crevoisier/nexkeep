@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { DATA_UPDATED_EVENT } from "@/lib/events";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -71,47 +72,62 @@ export function Sidebar() {
 
   const toggleSidebar = () => setIsOpen(!isOpen);
 
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
+    if (!session) return
     try {
-      // Récupérer les transactions
-      const transactionsResponse = await fetch("/api/transactions");
+      const [transactionsResponse, userResponse] = await Promise.all([
+        fetch("/api/transactions"),
+        fetch("/api/user/profile")
+      ])
       if (transactionsResponse.ok) {
-        const transactionsData = await transactionsResponse.json();
-        setTransactions(transactionsData);
+        const transactionsData = await transactionsResponse.json()
+        setTransactions(Array.isArray(transactionsData) ? transactionsData : [])
       }
-
-      // Récupérer le profil utilisateur (budget initial)
-      const userResponse = await fetch("/api/user/profile");
       if (userResponse.ok) {
-        const userData = await userResponse.json();
-        setInitialBudget(userData.budgetInitial || 0);
+        const userData = await userResponse.json()
+        setInitialBudget(Number(userData.budgetInitial) || 0)
       }
     } catch (error) {
-      console.error("Error fetching user data:", error);
+      console.error("Error fetching user data:", error)
     }
-  };
+  }, [session])
 
   useEffect(() => {
     if (session) {
-      fetchUserData();
+      fetchUserData()
     }
-  }, [session]);
+  }, [session, fetchUserData])
 
-  // Écouter les mises à jour du budget initial
+  // Écouter les mises à jour (transactions, budget, remboursements)
   useEffect(() => {
-    const handleBudgetUpdate = (event: CustomEvent) => {
-      if (session) {
-        // Mettre à jour le budget initial
-        setInitialBudget(event.detail.newBudget);
+    const handleBudgetUpdate = (event: CustomEvent<{ newBudget?: number; shouldRefetch?: boolean }>) => {
+      if (!session) return
+      const detail = event.detail
+      if (detail?.newBudget !== undefined) {
+        setInitialBudget(detail.newBudget)
+      } else if (detail?.shouldRefetch) {
+        fetchUserData()
       }
-    };
+    }
 
-    window.addEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
-    
+    const handleDataUpdated = () => {
+      if (session) fetchUserData()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && session) fetchUserData()
+    }
+
+    window.addEventListener('budgetUpdated', handleBudgetUpdate as EventListener)
+    window.addEventListener(DATA_UPDATED_EVENT, handleDataUpdated)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
-      window.removeEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
-    };
-  }, [session]);
+      window.removeEventListener('budgetUpdated', handleBudgetUpdate as EventListener)
+      window.removeEventListener(DATA_UPDATED_EVENT, handleDataUpdated)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [session, fetchUserData])
 
   // Calculer les statistiques
   const totalIncome = transactions

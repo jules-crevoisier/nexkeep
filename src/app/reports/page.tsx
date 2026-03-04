@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, TrendingUp, TrendingDown, Calendar } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { DATA_UPDATED_EVENT } from "@/lib/events";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { TransactionsChart } from "@/components/charts/transactions-chart";
 import { ComparisonChart } from "@/components/charts/comparison-chart";
@@ -40,6 +41,18 @@ export default function ReportsPage() {
     if (session) {
       fetchData();
     }
+  }, [session]);
+
+  useEffect(() => {
+    const handleDataUpdate = () => {
+      if (session) fetchData();
+    };
+    window.addEventListener(DATA_UPDATED_EVENT, handleDataUpdate);
+    window.addEventListener('budgetUpdated', handleDataUpdate);
+    return () => {
+      window.removeEventListener(DATA_UPDATED_EVENT, handleDataUpdate);
+      window.removeEventListener('budgetUpdated', handleDataUpdate);
+    };
   }, [session]);
 
   return (

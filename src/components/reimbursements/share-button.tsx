@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { safeParseJson, parseApiError } from '@/lib/api-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -37,11 +38,12 @@ export function ShareButton({ onShare }: ShareButtonProps) {
       
       const response = await fetch('/api/user/share-token')
       if (!response.ok) {
-        throw new Error('Erreur lors de la récupération du lien')
+        const errorMessage = await parseApiError(response)
+        throw new Error(errorMessage)
       }
       
-      const data = await response.json()
-      setShareData(data)
+      const data = await safeParseJson<{ token: string; shareUrl: string }>(response)
+      setShareData(data ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {
@@ -59,11 +61,12 @@ export function ShareButton({ onShare }: ShareButtonProps) {
       })
       
       if (!response.ok) {
-        throw new Error('Erreur lors de la régénération du lien')
+        const errorMessage = await parseApiError(response)
+        throw new Error(errorMessage)
       }
       
-      const data = await response.json()
-      setShareData(data)
+      const data = await safeParseJson<{ token: string; shareUrl: string }>(response)
+      setShareData(data ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {

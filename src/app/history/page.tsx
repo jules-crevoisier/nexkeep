@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "next-auth/react";
+import { DATA_UPDATED_EVENT } from "@/lib/events";
 import { useState, useEffect } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -89,6 +90,18 @@ export default function HistoryPage() {
     if (session) {
       fetchUserData();
     }
+  }, [session]);
+
+  useEffect(() => {
+    const handleDataUpdate = () => {
+      if (session) fetchUserData();
+    };
+    window.addEventListener(DATA_UPDATED_EVENT, handleDataUpdate);
+    window.addEventListener('budgetUpdated', handleDataUpdate);
+    return () => {
+      window.removeEventListener(DATA_UPDATED_EVENT, handleDataUpdate);
+      window.removeEventListener('budgetUpdated', handleDataUpdate);
+    };
   }, [session]);
 
   useEffect(() => {
@@ -170,8 +183,7 @@ export default function HistoryPage() {
 
   let currentBudget = initialBudget;
   const transactionsWithBudget: TransactionWithBudget[] = sortedTransactionsForDisplay.map((t: Transaction) => {
-    // Les montants sont déjà signés (positifs pour revenus, négatifs pour dépenses)
-    currentBudget += t.amount;
+    currentBudget += t.type === 'income' ? t.amount : -Math.abs(t.amount);
     
     return {
       ...t,
@@ -188,8 +200,7 @@ export default function HistoryPage() {
     // Calculer le budget après chaque transaction pour l'export
     let currentBudgetExport = initialBudget;
     const transactionsWithBudgetExport = sortedTransactions.map((t: Transaction) => {
-      // Les montants sont déjà signés (positifs pour revenus, négatifs pour dépenses)
-      currentBudgetExport += t.amount;
+      currentBudgetExport += t.type === 'income' ? t.amount : -Math.abs(t.amount);
       
       return {
         ...t,
@@ -298,8 +309,7 @@ export default function HistoryPage() {
     // Calculer le budget après chaque transaction pour le PDF
     let currentBudgetPDF = initialBudget;
     const transactionsWithBudgetPDF = sortedTransactionsPDF.map((t: Transaction) => {
-      // Les montants sont déjà signés (positifs pour revenus, négatifs pour dépenses)
-      currentBudgetPDF += t.amount;
+      currentBudgetPDF += t.type === 'income' ? t.amount : -Math.abs(t.amount);
       
       return {
         ...t,

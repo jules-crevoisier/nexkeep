@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { safeParseJson } from '@/lib/api-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -71,8 +72,8 @@ export default function ReimbursementsPage() {
         setIsLoading(true)
         const response = await fetch('/api/reimbursements')
         if (response.ok) {
-          const data = await response.json()
-          setRequests(data.requests)
+          const data = await safeParseJson<{ requests?: ReimbursementRequest[] }>(response)
+          setRequests(data?.requests ?? [])
         }
       } catch (error) {
         console.error('Erreur lors du chargement des demandes:', error)

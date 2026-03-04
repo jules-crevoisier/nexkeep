@@ -31,10 +31,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const userName = user.email.split('@')[0]
+
     // Retourner les informations de l'utilisateur (sans données sensibles)
     return NextResponse.json({
+      userName,
       user: {
-        name: user.email.split('@')[0], // Utiliser la partie avant @ comme nom
+        name: userName,
         email: user.email
       },
       valid: true

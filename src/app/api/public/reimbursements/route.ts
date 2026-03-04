@@ -5,20 +5,26 @@ import { sendReimbursementConfirmation, sendAdminNotification } from '@/lib/emai
 // POST - Créer une nouvelle demande de remboursement (publique)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    let body: { requesterName?: string; requesterEmail?: string; amount?: unknown; description?: string; receiptUrl?: string; ribUrl?: string; notes?: string; token?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Données JSON invalides' }, { status: 400 })
+    }
     const { requesterName, requesterEmail, amount, description, receiptUrl, ribUrl, notes, token } = body
 
     // Validation des données
-    if (!requesterName || !requesterEmail || !amount || !description) {
+    if (!requesterName?.trim() || !requesterEmail?.trim() || !description?.trim()) {
       return NextResponse.json(
-        { error: 'Nom, email, montant et description sont requis' },
+        { error: 'Nom, email et description sont requis' },
         { status: 400 }
       )
     }
 
-    if (amount <= 0) {
+    const parsedAmount = typeof amount === 'string' ? parseFloat(amount.replace(',', '.')) : Number(amount)
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
       return NextResponse.json(
-        { error: 'Le montant doit être positif' },
+        { error: 'Le montant doit être un nombre valide supérieur à 0' },
         { status: 400 }
       )
     }
@@ -54,13 +60,13 @@ export async function POST(request: NextRequest) {
 
     const reimbursementRequest = await prisma.reimbursementRequest.create({
       data: {
-        requesterName,
-        requesterEmail,
-        amount,
-        description,
-        receiptUrl,
-        ribUrl,
-        notes,
+        requesterName: requesterName.trim(),
+        requesterEmail: requesterEmail.trim(),
+        amount: parsedAmount,
+        description: description.trim(),
+        receiptUrl: receiptUrl || null,
+        ribUrl: ribUrl || null,
+        notes: notes?.trim() || null,
         userId: user.id, // Lié à l'utilisateur qui a partagé le formulaire
         isPublicRequest: true, // Marquer comme demande publique
         status: 'pending'
@@ -71,7 +77,7 @@ export async function POST(request: NextRequest) {
     try {
       await Promise.all([
         sendReimbursementConfirmation(requesterEmail, requesterName, reimbursementRequest.id),
-        sendAdminNotification(requesterName, requesterEmail, amount, description, reimbursementRequest.id, user.email)
+        sendAdminNotification(requesterName, requesterEmail, parsedAmount, description, reimbursementRequest.id, user.email)
       ])
     } catch (emailError) {
       console.error('Erreur lors de l\'envoi des emails:', emailError)

@@ -25,6 +25,7 @@ import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { CategorySelector } from "@/components/forms/category-selector";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { dispatchDataUpdated } from "@/lib/events";
 
 export default function TransactionsPage() {
   const { data: session } = useSession();
@@ -74,8 +75,7 @@ export default function TransactionsPage() {
         setIncomeForm({ name: "", amount: "", description: "", category: "" });
         // Rafraîchir les données
         await fetchAllData();
-        // Émettre l'événement pour synchroniser les autres composants
-        window.dispatchEvent(new CustomEvent('budgetUpdated'));
+        dispatchDataUpdated({ type: 'transactions' });
       }
     } catch (error) {
       console.error("Error adding income:", error);
@@ -119,8 +119,7 @@ export default function TransactionsPage() {
         setExpenseForm({ name: "", amount: "", description: "", category: "" });
         // Rafraîchir les données
         await fetchAllData();
-        // Émettre l'événement pour synchroniser les autres composants
-        window.dispatchEvent(new CustomEvent('budgetUpdated'));
+        dispatchDataUpdated({ type: 'transactions' });
       }
     } catch (error) {
       console.error("Error adding expense:", error);
@@ -175,18 +174,20 @@ export default function TransactionsPage() {
     }
   }, [session]);
 
-  // Écouter les événements de mise à jour du budget
+  // Écouter les événements de mise à jour (transactions, budget, remboursements)
   useEffect(() => {
-    const handleBudgetUpdate = () => {
-      fetchAllData();
+    const handleDataUpdate = () => {
+      if (session) fetchAllData();
     };
 
-    window.addEventListener('budgetUpdated', handleBudgetUpdate);
-    
+    window.addEventListener('budgetUpdated', handleDataUpdate);
+    window.addEventListener('nexkeep:dataUpdated', handleDataUpdate);
+
     return () => {
-      window.removeEventListener('budgetUpdated', handleBudgetUpdate);
+      window.removeEventListener('budgetUpdated', handleDataUpdate);
+      window.removeEventListener('nexkeep:dataUpdated', handleDataUpdate);
     };
-  }, []);
+  }, [session]);
 
   // Rafraîchir les données quand la page devient visible (retour depuis les paramètres)
   useEffect(() => {

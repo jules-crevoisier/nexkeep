@@ -13,6 +13,7 @@ import {
   Wallet
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { DATA_UPDATED_EVENT } from "@/lib/events";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Transaction } from "@/types";
@@ -50,27 +51,36 @@ export default function DashboardPage() {
     }
   }, [session]);
 
-  // Rafraîchir les données quand la page devient visible (ex: retour depuis paramètres)
+  // Rafraîchir les données quand la page devient visible ou quand les données changent
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && session) {
+      if (document.visibilityState === 'visible' && session) {
         fetchUserData();
       }
     };
 
-    const handleBudgetUpdate = (event: CustomEvent) => {
-      if (session) {
-        // Mettre à jour directement le budget initial sans refetch complet
-        setUserBudgetInitial(event.detail.newBudget);
+    const handleBudgetUpdate = (event: CustomEvent<{ newBudget?: number; shouldRefetch?: boolean }>) => {
+      if (!session) return;
+      const detail = event.detail;
+      if (detail?.newBudget !== undefined) {
+        setUserBudgetInitial(detail.newBudget);
+      } else if (detail?.shouldRefetch) {
+        fetchUserData();
       }
+    };
+
+    const handleDataUpdated = () => {
+      if (session) fetchUserData();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
-    
+    window.addEventListener(DATA_UPDATED_EVENT, handleDataUpdated);
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('budgetUpdated', handleBudgetUpdate as EventListener);
+      window.removeEventListener(DATA_UPDATED_EVENT, handleDataUpdated);
     };
   }, [session]);
 

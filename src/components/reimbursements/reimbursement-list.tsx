@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { safeParseJson, parseApiError } from '@/lib/api-utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -74,11 +75,12 @@ export function ReimbursementList({ onViewDetails, onDelete, statusFilter }: Rei
       const response = await fetch(`/api/reimbursements?${params}`)
       
       if (!response.ok) {
-        throw new Error('Erreur lors du chargement des demandes')
+        const errorMessage = await parseApiError(response)
+        throw new Error(errorMessage)
       }
       
-      const data = await response.json()
-      setRequests(data.requests)
+      const data = await safeParseJson<{ requests?: ReimbursementRequest[] }>(response)
+      setRequests(data?.requests ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {

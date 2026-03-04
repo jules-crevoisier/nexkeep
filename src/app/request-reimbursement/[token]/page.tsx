@@ -9,39 +9,46 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CreditCard, User, Mail, Euro, CheckCircle, AlertCircle, FileText } from 'lucide-react'
+import {
+  useReimbursementFormState,
+  parseAndValidateAmount,
+  uploadFileToApi,
+  parseApiError
+} from '@/hooks/use-reimbursement-form'
+import { safeParseJson } from '@/lib/api-utils'
 
 function TokenRequestReimbursementPage() {
   const params = useParams()
   const token = params.token as string
-  
+
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tokenValid, setTokenValid] = useState<boolean | null>(null)
   const [userName, setUserName] = useState<string>('')
-  const [receiptFile, setReceiptFile] = useState<File | null>(null)
-  const [ribFile, setRibFile] = useState<File | null>(null)
 
-  const [formData, setFormData] = useState({
-    requesterName: '',
-    requesterEmail: '',
-    amount: '',
-    description: '',
-    notes: ''
-  })
+  const {
+    formData,
+    receiptFile,
+    ribFile,
+    fileInputKey,
+    handleInputChange,
+    handleFileChange,
+    resetForm
+  } = useReimbursementFormState()
 
   useEffect(() => {
     const verifyToken = async () => {
       try {
-        const response = await fetch(`/api/public/verify-token?token=${token}`)
+        const response = await fetch(`/api/public/verify-token?token=${encodeURIComponent(token)}`)
         if (response.ok) {
-          const data = await response.json()
+          const data = await safeParseJson<{ userName?: string; user?: { name?: string } }>(response)
           setTokenValid(true)
-          setUserName(data.userName || '')
+          setUserName(data.userName ?? data.user?.name ?? '')
         } else {
           setTokenValid(false)
         }
-      } catch (err) {
+      } catch {
         setTokenValid(false)
       }
     }
@@ -51,54 +58,29 @@ function TokenRequestReimbursementPage() {
     }
   }, [token])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'receipt' | 'rib') => {
-    const file = e.target.files?.[0]
-    if (type === 'receipt') {
-      setReceiptFile(file || null)
-    } else {
-      setRibFile(file || null)
-    }
-  }
-
-  const uploadFile = async (file: File): Promise<string> => {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Erreur lors de l\'upload du fichier')
-    }
-
-    const data = await response.json()
-    return data.fileUrl
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
 
     try {
+      // Validation du montant
+      const amountValidation = parseAndValidateAmount(formData.amount)
+      if (!amountValidation.valid) {
+        setError(amountValidation.error ?? 'Montant invalide')
+        return
+      }
+
       // Upload des fichiers
-      let receiptUrl = null
-      let ribUrl = null
+      let receiptUrl: string | null = null
+      let ribUrl: string | null = null
 
       if (receiptFile) {
-        receiptUrl = await uploadFile(receiptFile)
+        receiptUrl = await uploadFileToApi(receiptFile)
       }
 
       if (ribFile) {
-        ribUrl = await uploadFile(ribFile)
+        ribUrl = await uploadFileToApi(ribFile)
       }
 
       const response = await fetch('/api/public/reimbursements', {
@@ -107,8 +89,11 @@ function TokenRequestReimbursementPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
-          amount: parseFloat(formData.amount),
+          requesterName: formData.requesterName.trim(),
+          requesterEmail: formData.requesterEmail.trim(),
+          amount: amountValidation.amount,
+          description: formData.description.trim(),
+          notes: formData.notes.trim() || undefined,
           receiptUrl,
           ribUrl,
           token
@@ -116,10 +101,11 @@ function TokenRequestReimbursementPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erreur lors de la création de la demande')
+        const errorMessage = await parseApiError(response)
+        throw new Error(errorMessage)
       }
 
+      resetForm()
       setIsSuccess(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
@@ -177,18 +163,10 @@ function TokenRequestReimbursementPage() {
               Votre demande de remboursement a été envoyée avec succès à {userName}. 
               Vous recevrez une confirmation par email.
             </p>
-            <Button 
+            <Button
               onClick={() => {
                 setIsSuccess(false)
-                setFormData({
-                  requesterName: '',
-                  requesterEmail: '',
-                  amount: '',
-                  description: '',
-                  notes: ''
-                })
-                setReceiptFile(null)
-                setRibFile(null)
+                resetForm()
               }}
               className="w-full"
             >
@@ -291,6 +269,7 @@ function TokenRequestReimbursementPage() {
                   Facture (PDF, JPG, PNG) *
                 </Label>
                 <Input
+                  key={`receipt-${fileInputKey}`}
                   id="receipt"
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png"
@@ -310,6 +289,7 @@ function TokenRequestReimbursementPage() {
                   RIB (PDF, JPG, PNG) - Si première fois
                 </Label>
                 <Input
+                  key={`rib-${fileInputKey}`}
                   id="rib"
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png"

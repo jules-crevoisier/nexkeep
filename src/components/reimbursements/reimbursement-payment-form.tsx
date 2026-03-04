@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { parseAndValidateAmount, parseApiError } from '@/lib/api-utils'
+import { dispatchDataUpdated } from '@/lib/events'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -62,23 +64,32 @@ export function ReimbursementPaymentForm({
     setError(null)
 
     try {
+      const amountValidation = parseAndValidateAmount(formData.amount)
+      if (!amountValidation.valid) {
+        setError(amountValidation.error ?? 'Montant invalide')
+        return
+      }
+
       const response = await fetch(`/api/reimbursements/${request.id}/pay`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
-          amount: parseFloat(formData.amount),
+          amount: amountValidation.amount,
+          method: formData.method,
+          reference: formData.reference.trim() || undefined,
+          notes: formData.notes.trim() || undefined,
           transferDate: transferDate?.toISOString()
         }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erreur lors de l\'enregistrement du remboursement')
+        const errorMessage = await parseApiError(response)
+        throw new Error(errorMessage)
       }
 
+      dispatchDataUpdated({ type: 'transactions' })
       if (onSuccess) {
         onSuccess()
       }

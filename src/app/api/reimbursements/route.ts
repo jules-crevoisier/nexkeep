@@ -63,33 +63,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
-    const body = await request.json()
+    let body: { requesterName?: string; requesterEmail?: string; amount?: unknown; description?: string; receiptUrl?: string; ribUrl?: string; notes?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Données JSON invalides' }, { status: 400 })
+    }
     const { requesterName, requesterEmail, amount, description, receiptUrl, ribUrl, notes } = body
 
     // Validation des données
-    if (!requesterName || !amount || !description) {
+    if (!requesterName?.trim() || !description?.trim()) {
       return NextResponse.json(
-        { error: 'Nom, montant et description sont requis' },
+        { error: 'Nom et description sont requis' },
         { status: 400 }
       )
     }
 
-    if (amount <= 0) {
+    const parsedAmount = typeof amount === 'string' ? parseFloat(amount.replace(',', '.')) : Number(amount)
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
       return NextResponse.json(
-        { error: 'Le montant doit être positif' },
+        { error: 'Le montant doit être un nombre valide supérieur à 0' },
         { status: 400 }
       )
     }
 
     const reimbursementRequest = await prisma.reimbursementRequest.create({
       data: {
-        requesterName,
-        requesterEmail,
-        amount,
-        description,
-        receiptUrl,
-        ribUrl,
-        notes,
+        requesterName: requesterName.trim(),
+        requesterEmail: requesterEmail?.trim() || null,
+        amount: parsedAmount,
+        description: description.trim(),
+        receiptUrl: receiptUrl || null,
+        ribUrl: ribUrl || null,
+        notes: notes?.trim() || null,
         userId: session.user.id
       }
     })
