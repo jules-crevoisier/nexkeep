@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Sidebar } from '@/components/layout/sidebar'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { CashTransactionForm, CashTransferForm } from '@/components/forms/cash-transaction-form'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
 import { computeBalances, type BalanceTransaction, TRANSFER_CATEGORY } from '@/lib/balances'
 import { DATA_UPDATED_EVENT } from '@/lib/events'
 import { Wallet, Landmark, ArrowLeftRight, Plus, Minus, TrendingUp, TrendingDown } from 'lucide-react'
@@ -169,11 +171,17 @@ export default function LiquidePage() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <p className="text-muted-foreground text-sm">Chargement...</p>
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
               ) : cashMovements.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  Aucun mouvement en espèces pour le moment.
-                </p>
+                <EmptyState
+                  icon={Wallet}
+                  title="Aucun mouvement"
+                  description="Aucun mouvement en espèces pour le moment."
+                />
               ) : (
                 <div className="divide-y">
                   {cashMovements.map((t) => {

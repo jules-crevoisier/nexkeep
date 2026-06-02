@@ -13,148 +13,102 @@ import {
   Area,
   AreaChart
 } from "recharts";
-import { Calendar, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
+import { Calendar, BarChart3 } from "lucide-react";
+import { academicMonths, academicYearLabel, academicYearRange } from "@/lib/academic-year";
+import { CHART_COLORS } from "@/lib/chart-colors";
+import { TRANSFER_CATEGORY } from "@/lib/balances";
 
 interface Transaction {
   id: string;
   name: string;
   amount: number;
   type: "income" | "expense";
+  account?: string | null;
   description?: string;
-  category?: string;
+  category?: string | null;
   date: string;
 }
 
 interface ComparisonChartProps {
   transactions: Transaction[];
-  initialBudget: number;
+  /** Année scolaire de départ (sept N → août N+1). */
+  startYear: number;
 }
 
-export function ComparisonChart({ transactions, initialBudget }: ComparisonChartProps) {
-  // Calculer les données mensuelles pour l'année courante
+const absAmount = (t: Transaction) => Math.abs(t.amount);
+
+export function ComparisonChart({ transactions, startYear }: ComparisonChartProps) {
+  const realTransactions = transactions.filter((t) => t.category !== TRANSFER_CATEGORY);
+
+  // Évolution mensuelle (sept → août) de l'année scolaire sélectionnée
   const monthlyData = () => {
-    const currentYear = new Date().getFullYear();
-    const months = new Map();
-    
-    // Initialiser tous les mois de l'année
-    for (let i = 0; i < 12; i++) {
-      const monthKey = `${currentYear}-${String(i + 1).padStart(2, '0')}`;
-      const monthName = new Date(currentYear, i).toLocaleDateString('fr-FR', { month: 'long' });
-      
-      months.set(monthKey, {
-        month: monthName,
-        income: 0,
-        expense: 0,
-        net: 0,
-        budget: initialBudget
-      });
-    }
-    
-    // Ajouter les transactions
-    transactions.forEach(transaction => {
+    const months = academicMonths(startYear).map((m) => ({
+      key: m.key,
+      month: m.label,
+      income: 0,
+      expense: 0,
+    }));
+    const byKey = new Map(months.map((m) => [m.key, m]));
+
+    realTransactions.forEach((transaction) => {
       const date = new Date(transaction.date);
-      if (date.getFullYear() === currentYear) {
-        const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        const data = months.get(monthKey);
-        
-        if (data) {
-          if (transaction.type === 'income') {
-            data.income += transaction.amount;
-          } else {
-            data.expense += transaction.amount;
-          }
-          data.net = data.income - data.expense;
-        }
-      }
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      const data = byKey.get(key);
+      if (!data) return;
+      if (transaction.type === "income") data.income += absAmount(transaction);
+      else data.expense += absAmount(transaction);
     });
-    
-    return Array.from(months.values());
+
+    return months;
   };
 
-  // Calculer les données annuelles (3 dernières années)
+  // Totaux d'une année scolaire donnée
+  const yearTotals = (year: number) => {
+    const { start, end } = academicYearRange(year);
+    let income = 0;
+    let expense = 0;
+    let count = 0;
+    realTransactions.forEach((t) => {
+      const d = new Date(t.date);
+      if (d < start || d > end) return;
+      count += 1;
+      if (t.type === "income") income += absAmount(t);
+      else expense += absAmount(t);
+    });
+    return { income, expense, net: income - expense, count };
+  };
+
+  // 3 dernières années scolaires jusqu'à celle sélectionnée
   const yearlyData = () => {
-    const years = new Map();
-    const currentYear = new Date().getFullYear();
-    
-    // Initialiser les 3 dernières années
+    const result = [];
     for (let i = 2; i >= 0; i--) {
-      const year = currentYear - i;
-      years.set(year, {
-        year: year.toString(),
-        income: 0,
-        expense: 0,
-        net: 0,
-        transactions: 0
-      });
+      const year = startYear - i;
+      const totals = yearTotals(year);
+      result.push({ year: academicYearLabel(year), ...totals });
     }
-    
-    // Ajouter les transactions
-    transactions.forEach(transaction => {
-      const date = new Date(transaction.date);
-      const year = date.getFullYear();
-      
-      if (years.has(year)) {
-        const data = years.get(year);
-        if (transaction.type === 'income') {
-          data.income += transaction.amount;
-        } else {
-          data.expense += transaction.amount;
-        }
-        data.net = data.income - data.expense;
-        data.transactions += 1;
-      }
-    });
-    
-    return Array.from(years.values());
-  };
-
-  // Calculer les statistiques de comparaison
-  const comparisonStats = () => {
-    const monthly = monthlyData();
-    const yearly = yearlyData();
-    
-    const currentMonth = monthly[new Date().getMonth()];
-    const previousMonth = monthly[new Date().getMonth() - 1] || { income: 0, expense: 0, net: 0 };
-    
-    const currentYear = yearly[yearly.length - 1];
-    const previousYear = yearly[yearly.length - 2] || { income: 0, expense: 0, net: 0 };
-    
-    return {
-      monthly: {
-        incomeChange: currentMonth.income - previousMonth.income,
-        expenseChange: currentMonth.expense - previousMonth.expense,
-        netChange: currentMonth.net - previousMonth.net,
-        incomePercent: previousMonth.income > 0 ? ((currentMonth.income - previousMonth.income) / previousMonth.income) * 100 : 0,
-        expensePercent: previousMonth.expense > 0 ? ((currentMonth.expense - previousMonth.expense) / previousMonth.expense) * 100 : 0
-      },
-      yearly: {
-        incomeChange: currentYear.income - previousYear.income,
-        expenseChange: currentYear.expense - previousYear.expense,
-        netChange: currentYear.net - previousYear.net,
-        incomePercent: previousYear.income > 0 ? ((currentYear.income - previousYear.income) / previousYear.income) * 100 : 0,
-        expensePercent: previousYear.expense > 0 ? ((currentYear.expense - previousYear.expense) / previousYear.expense) * 100 : 0
-      }
-    };
+    return result;
   };
 
   const monthlyChartData = monthlyData();
   const yearlyChartData = yearlyData();
-  const stats = comparisonStats();
+
+  const current = yearTotals(startYear);
+  const previous = yearTotals(startYear - 1);
+  const incomeDelta = current.income - previous.income;
+  const expenseDelta = current.expense - previous.expense;
+  const incomePct = previous.income > 0 ? (incomeDelta / previous.income) * 100 : 0;
+  const expensePct = previous.expense > 0 ? (expenseDelta / previous.expense) * 100 : 0;
 
   const CustomTooltip = ({ active, payload, label }: {
     active?: boolean;
-    payload?: Array<{
-      color: string;
-      name: string;
-      value: number;
-    }>;
+    payload?: Array<{ color: string; name: string; value: number }>;
     label?: string;
   }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
           <p className="font-medium">{label}</p>
-          {payload.map((entry: { color: string; name: string; value: number }, index: number) => (
+          {payload.map((entry, index) => (
             <p key={index} style={{ color: entry.color }} className="text-sm">
               {entry.name}: €{entry.value.toFixed(2)}
             </p>
@@ -167,69 +121,44 @@ export function ComparisonChart({ transactions, initialBudget }: ComparisonChart
 
   return (
     <div className="space-y-6">
-      {/* Statistiques de comparaison */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      {/* Comparaison année scolaire vs précédente */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="transition-shadow hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenus ce mois</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Revenus {academicYearLabel(startYear)}</CardTitle>
+            <BarChart3 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              €{monthlyChartData[new Date().getMonth()]?.income.toFixed(2) || "0.00"}
-            </div>
-            <p className={`text-xs ${stats.monthly.incomeChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {stats.monthly.incomeChange >= 0 ? '+' : ''}€{stats.monthly.incomeChange.toFixed(2)} 
-              ({stats.monthly.incomePercent.toFixed(1)}%) vs mois dernier
+            <div className="text-2xl font-bold text-green-600">€{current.income.toFixed(2)}</div>
+            <p className={`text-xs ${incomeDelta >= 0 ? "text-green-600" : "text-red-600"}`}>
+              {incomeDelta >= 0 ? "+" : ""}€{incomeDelta.toFixed(2)} ({incomePct.toFixed(1)}%) vs {academicYearLabel(startYear - 1)}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="transition-shadow hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dépenses ce mois</CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium">Dépenses {academicYearLabel(startYear)}</CardTitle>
+            <BarChart3 className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              €{monthlyChartData[new Date().getMonth()]?.expense.toFixed(2) || "0.00"}
-            </div>
-            <p className={`text-xs ${stats.monthly.expenseChange <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {stats.monthly.expenseChange >= 0 ? '+' : ''}€{stats.monthly.expenseChange.toFixed(2)} 
-              ({stats.monthly.expensePercent.toFixed(1)}%) vs mois dernier
+            <div className="text-2xl font-bold text-red-600">€{current.expense.toFixed(2)}</div>
+            <p className={`text-xs ${expenseDelta <= 0 ? "text-green-600" : "text-red-600"}`}>
+              {expenseDelta >= 0 ? "+" : ""}€{expenseDelta.toFixed(2)} ({expensePct.toFixed(1)}%) vs {academicYearLabel(startYear - 1)}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="transition-shadow hover:shadow-md sm:col-span-2 lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenus cette année</CardTitle>
-            <BarChart3 className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">Solde net {academicYearLabel(startYear)}</CardTitle>
+            <Calendar className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              €{yearlyChartData[yearlyChartData.length - 1]?.income.toFixed(2) || "0.00"}
+            <div className={`text-2xl font-bold ${current.net >= 0 ? "text-green-600" : "text-red-600"}`}>
+              €{current.net.toFixed(2)}
             </div>
-            <p className={`text-xs ${stats.yearly.incomeChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {stats.yearly.incomeChange >= 0 ? '+' : ''}€{stats.yearly.incomeChange.toFixed(2)} 
-              ({stats.yearly.incomePercent.toFixed(1)}%) vs année dernière
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dépenses cette année</CardTitle>
-            <Calendar className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
-              €{yearlyChartData[yearlyChartData.length - 1]?.expense.toFixed(2) || "0.00"}
-            </div>
-            <p className={`text-xs ${stats.yearly.expenseChange <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {stats.yearly.expenseChange >= 0 ? '+' : ''}€{stats.yearly.expenseChange.toFixed(2)} 
-              ({stats.yearly.expensePercent.toFixed(1)}%) vs année dernière
-            </p>
+            <p className="text-muted-foreground text-xs">{current.count} transaction{current.count > 1 ? "s" : ""}</p>
           </CardContent>
         </Card>
       </div>
@@ -238,21 +167,19 @@ export function ComparisonChart({ transactions, initialBudget }: ComparisonChart
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="monthly" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            Comparaison Mensuelle
+            Mensuelle
           </TabsTrigger>
           <TabsTrigger value="yearly" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
-            Comparaison Annuelle
+            Annuelle
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="monthly" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Évolution Mensuelle {new Date().getFullYear()}</CardTitle>
-              <CardDescription>
-                Comparaison des revenus et dépenses mois par mois
-              </CardDescription>
+              <CardTitle>Évolution mensuelle {academicYearLabel(startYear)}</CardTitle>
+              <CardDescription>Revenus et dépenses mois par mois (septembre → août)</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
@@ -261,8 +188,8 @@ export function ComparisonChart({ transactions, initialBudget }: ComparisonChart
                   <XAxis dataKey="month" />
                   <YAxis />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="income" fill="#22c55e" name="Revenus" />
-                  <Bar dataKey="expense" fill="#ef4444" name="Dépenses" />
+                  <Bar dataKey="income" fill={CHART_COLORS.income} name="Revenus" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expense" fill={CHART_COLORS.expense} name="Dépenses" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -272,10 +199,8 @@ export function ComparisonChart({ transactions, initialBudget }: ComparisonChart
         <TabsContent value="yearly" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Comparaison Annuelle</CardTitle>
-              <CardDescription>
-                Évolution des revenus et dépenses sur 3 ans
-              </CardDescription>
+              <CardTitle>Comparaison annuelle</CardTitle>
+              <CardDescription>Évolution sur 3 années scolaires</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
@@ -288,18 +213,18 @@ export function ComparisonChart({ transactions, initialBudget }: ComparisonChart
                     type="monotone"
                     dataKey="income"
                     stackId="1"
-                    stroke="#22c55e"
-                    fill="#22c55e"
-                    fillOpacity={0.6}
+                    stroke={CHART_COLORS.income}
+                    fill={CHART_COLORS.income}
+                    fillOpacity={0.5}
                     name="Revenus"
                   />
                   <Area
                     type="monotone"
                     dataKey="expense"
                     stackId="2"
-                    stroke="#ef4444"
-                    fill="#ef4444"
-                    fillOpacity={0.6}
+                    stroke={CHART_COLORS.expense}
+                    fill={CHART_COLORS.expense}
+                    fillOpacity={0.5}
                     name="Dépenses"
                   />
                 </AreaChart>

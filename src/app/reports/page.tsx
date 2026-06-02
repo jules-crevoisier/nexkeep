@@ -1,35 +1,54 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, TrendingDown, Calendar } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, Wallet, Hash } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { DATA_UPDATED_EVENT } from "@/lib/events";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { TransactionsChart } from "@/components/charts/transactions-chart";
 import { ComparisonChart } from "@/components/charts/comparison-chart";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { CardGridSkeleton, BlockSkeleton } from "@/components/ui/card-skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  getAcademicYearStart,
+  academicYearLabel,
+  listAcademicYears,
+  filterByAcademicYear,
+} from "@/lib/academic-year";
+import { computeIncomeExpense } from "@/lib/balances";
 import { useState, useEffect } from "react";
+
+interface Transaction {
+  id: string;
+  name: string;
+  amount: number;
+  type: "income" | "expense";
+  account?: string | null;
+  category?: string | null;
+  date: string;
+}
 
 export default function ReportsPage() {
   const { data: session } = useSession();
-  const [transactions, setTransactions] = useState([]);
-  const [initialBudget, setInitialBudget] = useState(0);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [startYear, setStartYear] = useState<number>(getAcademicYearStart(new Date()));
 
   const fetchData = async () => {
     try {
-      // Récupérer les transactions
       const transactionsResponse = await fetch("/api/transactions");
       if (transactionsResponse.ok) {
         const transactionsData = await transactionsResponse.json();
         setTransactions(transactionsData);
-      }
-
-      // Récupérer le budget initial
-      const userResponse = await fetch("/api/user/profile");
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        setInitialBudget(userData.budgetInitial || 0);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -38,9 +57,7 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    if (session) {
-      fetchData();
-    }
+    if (session) fetchData();
   }, [session]);
 
   useEffect(() => {
@@ -48,62 +65,101 @@ export default function ReportsPage() {
       if (session) fetchData();
     };
     window.addEventListener(DATA_UPDATED_EVENT, handleDataUpdate);
-    window.addEventListener('budgetUpdated', handleDataUpdate);
+    window.addEventListener("budgetUpdated", handleDataUpdate);
     return () => {
       window.removeEventListener(DATA_UPDATED_EVENT, handleDataUpdate);
-      window.removeEventListener('budgetUpdated', handleDataUpdate);
+      window.removeEventListener("budgetUpdated", handleDataUpdate);
     };
   }, [session]);
+
+  const years = listAcademicYears(transactions);
+  const yearTransactions = filterByAcademicYear(transactions, startYear);
+  const { income, expenses } = computeIncomeExpense(yearTransactions);
+  const net = income - expenses;
+
+  const yearSelector = (
+    <Select value={String(startYear)} onValueChange={(v) => setStartYear(Number(v))}>
+      <SelectTrigger className="w-[160px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {years.map((y) => (
+          <SelectItem key={y} value={String(y)}>
+            Année {academicYearLabel(y)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
   return (
     <AuthGuard>
       <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Rapports</h1>
-            <p className="text-muted-foreground">
-              Analysez vos finances avec des graphiques et statistiques
-            </p>
-          </div>
-        </div>
+        <div className="space-y-6">
+          <PageHeader
+            title="Rapports"
+            description="Analyse de l'année scolaire (septembre → août)"
+            actions={!loading && transactions.length > 0 ? yearSelector : undefined}
+          />
 
-        {/* Charts Section */}
-        {loading ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Chargement des données...</p>
-          </div>
-        ) : transactions.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Aucune donnée disponible</CardTitle>
-              <CardDescription>
-                Ajoutez des transactions pour voir les graphiques
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Commencez par ajouter des transactions</p>
+          {loading ? (
+            <div className="space-y-6">
+              <CardGridSkeleton count={4} />
+              <BlockSkeleton />
+            </div>
+          ) : transactions.length === 0 ? (
+            <EmptyState
+              icon={BarChart3}
+              title="Aucune donnée disponible"
+              description="Ajoutez des transactions pour voir les graphiques et statistiques."
+            />
+          ) : (
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <StatCard
+                  label="Revenus"
+                  value={`€${income.toFixed(2)}`}
+                  icon={TrendingUp}
+                  iconClassName="text-green-600"
+                  valueClassName="text-green-600"
+                />
+                <StatCard
+                  label="Dépenses"
+                  value={`€${expenses.toFixed(2)}`}
+                  icon={TrendingDown}
+                  iconClassName="text-red-600"
+                  valueClassName="text-red-600"
+                />
+                <StatCard
+                  label="Solde net"
+                  value={`€${net.toFixed(2)}`}
+                  icon={Wallet}
+                  iconClassName="text-blue-600"
+                  valueClassName={net >= 0 ? "text-green-600" : "text-red-600"}
+                />
+                <StatCard
+                  label="Transactions"
+                  value={yearTransactions.length}
+                  icon={Hash}
+                  hint={`Année ${academicYearLabel(startYear)}`}
+                />
               </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            <TransactionsChart 
-              transactions={transactions} 
-              initialBudget={initialBudget} 
-            />
-            <ComparisonChart 
-              transactions={transactions} 
-              initialBudget={initialBudget} 
-            />
-          </div>
-        )}
 
-      </div>
+              {yearTransactions.length === 0 ? (
+                <EmptyState
+                  icon={BarChart3}
+                  title={`Aucune transaction pour ${academicYearLabel(startYear)}`}
+                  description="Sélectionnez une autre année scolaire."
+                />
+              ) : (
+                <div className="space-y-6">
+                  <TransactionsChart transactions={yearTransactions} startYear={startYear} />
+                  <ComparisonChart transactions={transactions} startYear={startYear} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </DashboardLayout>
     </AuthGuard>
   );

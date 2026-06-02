@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { CommandPalette } from "./command-palette";
 import {
   LayoutDashboard,
   History,
@@ -25,7 +26,8 @@ import {
   CreditCard,
   FileText,
   Wallet,
-  Landmark
+  Landmark,
+  Search
 } from "lucide-react";
 
 const navigation = [
@@ -71,8 +73,24 @@ const navigation = [
   },
 ];
 
-export function Sidebar() {
-  const [isOpen, setIsOpen] = useState(false);
+interface SidebarProps {
+  /** Ouverture contrôlée (mobile). Si omis, la sidebar gère son propre état. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function Sidebar({ open, onOpenChange }: SidebarProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const isControlled = open !== undefined;
+  const isOpen = isControlled ? open : internalOpen;
+  const setIsOpen = useCallback(
+    (value: boolean) => {
+      if (isControlled) onOpenChange?.(value);
+      else setInternalOpen(value);
+    },
+    [isControlled, onOpenChange]
+  );
   const pathname = usePathname();
   const { data: session } = useSession();
   const [transactions, setTransactions] = useState<BalanceTransaction[]>([]);
@@ -149,15 +167,20 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="lg:hidden fixed top-4 left-4 z-50"
-        onClick={toggleSidebar}
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
+      {/* Palette de commande globale (⌘K) */}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+
+      {/* Bouton menu flottant : seulement en mode non contrôlé (sinon l'en-tête mobile s'en charge). */}
+      {!isControlled && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="lg:hidden fixed top-4 left-4 z-50"
+          onClick={toggleSidebar}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      )}
 
       {/* Overlay for mobile */}
       {isOpen && (
@@ -214,6 +237,21 @@ export function Sidebar() {
           {/* Navigation */}
           <ScrollArea className="flex-1">
             <nav className="p-4 space-y-2">
+              <button
+                onClick={() => {
+                  setPaletteOpen(true);
+                  setIsOpen(false);
+                }}
+                className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex items-center space-x-3">
+                  <Search className="h-4 w-4" />
+                  <span>Rechercher</span>
+                </span>
+                <kbd className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium sm:inline">
+                  ⌘K
+                </kbd>
+              </button>
               {navigation.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -221,7 +259,7 @@ export function Sidebar() {
                     key={item.name}
                     href={item.href}
                     className={cn(
-                      "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       isActive
                         ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
