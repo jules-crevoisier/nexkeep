@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { DATA_UPDATED_EVENT } from "@/lib/events";
+import { computeBalances, computeIncomeExpense, type BalanceTransaction } from "@/lib/balances";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -22,7 +23,9 @@ import {
   TrendingDown,
   Calendar,
   CreditCard,
-  FileText
+  FileText,
+  Wallet,
+  Landmark
 } from "lucide-react";
 
 const navigation = [
@@ -40,6 +43,11 @@ const navigation = [
     name: "Remboursements",
     href: "/reimbursements",
     icon: CreditCard,
+  },
+  {
+    name: "Liquide",
+    href: "/liquide",
+    icon: Wallet,
   },
   {
     name: "Facturation",
@@ -67,8 +75,9 @@ export function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const { data: session } = useSession();
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<BalanceTransaction[]>([]);
   const [initialBudget, setInitialBudget] = useState(0);
+  const [cashInitial, setCashInitial] = useState(0);
 
   const toggleSidebar = () => setIsOpen(!isOpen);
 
@@ -86,6 +95,7 @@ export function Sidebar() {
       if (userResponse.ok) {
         const userData = await userResponse.json()
         setInitialBudget(Number(userData.budgetInitial) || 0)
+        setCashInitial(Number(userData.cashInitial) || 0)
       }
     } catch (error) {
       console.error("Error fetching user data:", error)
@@ -129,17 +139,13 @@ export function Sidebar() {
     }
   }, [session, fetchUserData])
 
-  // Calculer les statistiques
-  const totalIncome = transactions
-    .filter((t: { type: string; amount: number }) => t.type === "income")
-    .reduce((sum: number, t: { type: string; amount: number }) => sum + t.amount, 0);
-
-  const totalExpenses = transactions
-    .filter((t: { type: string; amount: number }) => t.type === "expense")
-    .reduce((sum: number, t: { type: string; amount: number }) => sum + Math.abs(t.amount), 0);
-
-  const netBalance = totalIncome - totalExpenses;
-  const currentBudget = initialBudget + netBalance;
+  // Calculer les statistiques (transferts internes exclus des revenus/dépenses)
+  const { income: totalIncome, expenses: totalExpenses } = computeIncomeExpense(transactions);
+  const { bank: bankBalance, cash: cashBalance, total: currentBudget } = computeBalances(
+    transactions,
+    initialBudget,
+    cashInitial
+  );
 
   return (
     <>
@@ -251,19 +257,32 @@ export function Sidebar() {
                 <Separator />
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center space-x-2">
-                    <Calendar className="h-4 w-4 text-blue-600" />
-                    <span className="text-muted-foreground">Budget Actuel</span>
+                    <Landmark className="h-4 w-4 text-blue-600" />
+                    <span className="text-muted-foreground">Banque</span>
                   </div>
-                  <span className={`font-medium ${currentBudget >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`font-medium ${bankBalance >= 0 ? 'text-foreground' : 'text-red-600'}`}>
+                    €{bankBalance.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center space-x-2">
+                    <Wallet className="h-4 w-4 text-amber-600" />
+                    <span className="text-muted-foreground">Liquide</span>
+                  </div>
+                  <span className={`font-medium ${cashBalance >= 0 ? 'text-foreground' : 'text-red-600'}`}>
+                    €{cashBalance.toFixed(2)}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                    <span className="text-muted-foreground font-medium">Total</span>
+                  </div>
+                  <span className={`font-bold ${currentBudget >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     €{currentBudget.toFixed(2)}
                   </span>
                 </div>
-                {initialBudget > 0 && (
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Budget initial: €{initialBudget.toFixed(2)}</span>
-                    <span>Solde net: €{netBalance.toFixed(2)}</span>
-                  </div>
-                )}
               </div>
             </div>
           )}

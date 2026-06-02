@@ -55,11 +55,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { name, amount, type, description, category } = await request.json()
+    const { name, amount, type, description, category, account } = await request.json()
 
     if (!name || !amount || !type) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
+
+    const accountValue = account === "cash" ? "cash" : "bank"
 
     // Récupérer le nom de la catégorie si un ID est fourni
     let categoryName = category;
@@ -78,6 +80,7 @@ export async function POST(request: NextRequest) {
         name,
         amount: parseFloat(amount),
         type,
+        account: accountValue,
         description,
         category: categoryName,
         userId: session.user.id

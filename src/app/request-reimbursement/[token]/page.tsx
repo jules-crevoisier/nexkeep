@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { CreditCard, User, Mail, Euro, CheckCircle, AlertCircle, FileText } from 'lucide-react'
+import { CreditCard, User, Mail, Euro, CheckCircle, AlertCircle, FileText, X } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   useReimbursementFormState,
   parseAndValidateAmount,
@@ -32,8 +33,10 @@ function TokenRequestReimbursementPage() {
     receiptFile,
     ribFile,
     fileInputKey,
+    fileError,
     handleInputChange,
     handleFileChange,
+    clearFile,
     resetForm
   } = useReimbursementFormState()
 
@@ -44,7 +47,7 @@ function TokenRequestReimbursementPage() {
         if (response.ok) {
           const data = await safeParseJson<{ userName?: string; user?: { name?: string } }>(response)
           setTokenValid(true)
-          setUserName(data.userName ?? data.user?.name ?? '')
+          setUserName(data?.userName ?? data?.user?.name ?? '')
         } else {
           setTokenValid(false)
         }
@@ -107,8 +110,11 @@ function TokenRequestReimbursementPage() {
 
       resetForm()
       setIsSuccess(true)
+      toast.success('Demande envoyée avec succès')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue')
+      const message = err instanceof Error ? err.message : 'Une erreur est survenue'
+      setError(message)
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }
@@ -263,6 +269,12 @@ function TokenRequestReimbursementPage() {
             </div>
 
             <div className="space-y-4">
+              {fileError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{fileError}</AlertDescription>
+                </Alert>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="receipt" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
@@ -277,9 +289,12 @@ function TokenRequestReimbursementPage() {
                   required
                 />
                 {receiptFile && (
-                  <p className="text-sm text-green-600">
-                    ✓ Fichier sélectionné: {receiptFile.name}
-                  </p>
+                  <div className="flex items-center justify-between text-sm text-green-600">
+                    <span className="truncate">✓ {receiptFile.name}</span>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => clearFile('receipt')}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -296,9 +311,12 @@ function TokenRequestReimbursementPage() {
                   onChange={(e) => handleFileChange(e, 'rib')}
                 />
                 {ribFile && (
-                  <p className="text-sm text-green-600">
-                    ✓ Fichier sélectionné: {ribFile.name}
-                  </p>
+                  <div className="flex items-center justify-between text-sm text-green-600">
+                    <span className="truncate">✓ {ribFile.name}</span>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => clearFile('rib')}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>

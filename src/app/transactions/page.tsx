@@ -34,12 +34,12 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(false);
 
   // États pour les formulaires
-  const [incomeForm, setIncomeForm] = useState({ name: "", amount: "", description: "", category: "" });
-  const [expenseForm, setExpenseForm] = useState({ name: "", amount: "", description: "", category: "" });
+  const [incomeForm, setIncomeForm] = useState({ name: "", amount: "", description: "", category: "", account: "bank" });
+  const [expenseForm, setExpenseForm] = useState({ name: "", amount: "", description: "", category: "", account: "bank" });
 
   // États pour la confirmation de dépense
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [pendingExpense, setPendingExpense] = useState<{name: string, amount: string, description: string, category: string} | null>(null);
+  const [pendingExpense, setPendingExpense] = useState<{name: string, amount: string, description: string, category: string, account: string} | null>(null);
 
   // Calcul du budget actuel
   const totalIncome = transactions
@@ -66,13 +66,14 @@ export default function TransactionsPage() {
           name: incomeForm.name,
           amount: incomeForm.amount,
           type: "income",
+          account: incomeForm.account,
           description: incomeForm.description,
           category: incomeForm.category
         })
       });
 
       if (response.ok) {
-        setIncomeForm({ name: "", amount: "", description: "", category: "" });
+        setIncomeForm({ name: "", amount: "", description: "", category: "", account: "bank" });
         // Rafraîchir les données
         await fetchAllData();
         dispatchDataUpdated({ type: 'transactions' });
@@ -100,7 +101,7 @@ export default function TransactionsPage() {
     await processExpense(expenseForm);
   };
 
-  const processExpense = async (expenseData: {name: string, amount: string, description: string, category?: string}) => {
+  const processExpense = async (expenseData: {name: string, amount: string, description: string, category?: string, account?: string}) => {
     setLoading(true);
     try {
       const response = await fetch("/api/transactions", {
@@ -110,13 +111,14 @@ export default function TransactionsPage() {
           name: expenseData.name,
           amount: expenseData.amount,
           type: "expense",
+          account: expenseData.account ?? "bank",
           description: expenseData.description,
           category: expenseData.category
         })
       });
 
       if (response.ok) {
-        setExpenseForm({ name: "", amount: "", description: "", category: "" });
+        setExpenseForm({ name: "", amount: "", description: "", category: "", account: "bank" });
         // Rafraîchir les données
         await fetchAllData();
         dispatchDataUpdated({ type: 'transactions' });
@@ -276,6 +278,27 @@ export default function TransactionsPage() {
                 onCategoryChange={(category) => setIncomeForm({...incomeForm, category})}
                 type="income"
               />
+              <div className="space-y-2">
+                <Label>Compte</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={incomeForm.account === "bank" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setIncomeForm({...incomeForm, account: "bank"})}
+                  >
+                    Banque
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={incomeForm.account === "cash" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setIncomeForm({...incomeForm, account: "cash"})}
+                  >
+                    Liquide
+                  </Button>
+                </div>
+              </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter
@@ -332,6 +355,27 @@ export default function TransactionsPage() {
                 onCategoryChange={(category) => setExpenseForm({...expenseForm, category})}
                 type="expense"
               />
+              <div className="space-y-2">
+                <Label>Compte</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={expenseForm.account === "bank" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setExpenseForm({...expenseForm, account: "bank"})}
+                  >
+                    Banque
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={expenseForm.account === "cash" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setExpenseForm({...expenseForm, account: "cash"})}
+                  >
+                    Liquide
+                  </Button>
+                </div>
+              </div>
                 <Button type="submit" variant="destructive" className="w-full" disabled={loading}>
                   <Minus className="mr-2 h-4 w-4" />
                   Dépenser

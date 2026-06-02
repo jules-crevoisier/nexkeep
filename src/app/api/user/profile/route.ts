@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
         email: true,
         budget: true,
         budgetInitial: true,
+        cashInitial: true,
         createdAt: true
       }
     })

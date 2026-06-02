@@ -32,26 +32,44 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    const { budgetInitial } = await request.json()
+    const { budgetInitial, cashInitial } = await request.json()
 
-    // Validation
-    if (typeof budgetInitial !== 'number' || isNaN(budgetInitial)) {
-      return NextResponse.json({ error: "Budget invalide" }, { status: 400 })
+    const data: { budgetInitial?: number; cashInitial?: number } = {}
+
+    if (budgetInitial !== undefined) {
+      if (typeof budgetInitial !== 'number' || isNaN(budgetInitial)) {
+        return NextResponse.json({ error: "Budget invalide" }, { status: 400 })
+      }
+      if (budgetInitial < 0) {
+        return NextResponse.json({ error: "Le budget ne peut pas être négatif" }, { status: 400 })
+      }
+      data.budgetInitial = budgetInitial
     }
 
-    if (budgetInitial < 0) {
-      return NextResponse.json({ error: "Le budget ne peut pas être négatif" }, { status: 400 })
+    if (cashInitial !== undefined) {
+      if (typeof cashInitial !== 'number' || isNaN(cashInitial)) {
+        return NextResponse.json({ error: "Solde liquide invalide" }, { status: 400 })
+      }
+      if (cashInitial < 0) {
+        return NextResponse.json({ error: "Le solde liquide ne peut pas être négatif" }, { status: 400 })
+      }
+      data.cashInitial = cashInitial
     }
 
-    // Mettre à jour le budget initial de l'utilisateur
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "Aucune valeur à mettre à jour" }, { status: 400 })
+    }
+
+    // Mettre à jour le(s) solde(s) initial(aux) de l'utilisateur
     const updatedUser = await prisma.user.update({
       where: { id: session.user.id },
-      data: { budgetInitial: budgetInitial },
-      select: { 
-        id: true, 
-        budgetInitial: true, 
+      data,
+      select: {
+        id: true,
+        budgetInitial: true,
+        cashInitial: true,
         budget: true,
-        email: true 
+        email: true
       }
     })
 

@@ -16,6 +16,7 @@ model User {
   password      String
   budget        Float    @default(0)
   budgetInitial Float    @default(0)
+  cashInitial   Float    @default(0) // Solde de caisse (liquide) initial
   shareToken    String?  @unique // Token unique pour partager le formulaire
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -36,6 +37,7 @@ model Transaction {
   name        String   // Nom de la transaction
   amount      Float
   type        String   // "income" ou "expense"
+  account     String   @default("bank") // "bank" (banque) ou "cash" (liquide)
   description String?
   category    String?
   date        DateTime @default(now())

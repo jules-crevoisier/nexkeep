@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { FileText, CreditCard, User, Mail, Euro } from 'lucide-react'
+import { FileText, CreditCard, User, Mail, Euro, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { dispatchDataUpdated } from '@/lib/events'
 import {
   useReimbursementFormState,
   parseAndValidateAmount,
@@ -30,8 +32,10 @@ export function ReimbursementRequestForm({ onSuccess, onCancel }: ReimbursementR
     receiptFile,
     ribFile,
     fileInputKey,
+    fileError,
     handleInputChange,
     handleFileChange,
+    clearFile,
     resetForm
   } = useReimbursementFormState()
 
@@ -82,13 +86,17 @@ export function ReimbursementRequestForm({ onSuccess, onCancel }: ReimbursementR
       }
 
       resetForm()
+      toast.success('Demande de remboursement créée')
+      dispatchDataUpdated({ type: 'transactions' })
       if (onSuccess) {
         onSuccess()
       } else {
         router.push('/reimbursements')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue')
+      const message = err instanceof Error ? err.message : 'Une erreur est survenue'
+      setError(message)
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }
@@ -177,6 +185,12 @@ export function ReimbursementRequestForm({ onSuccess, onCancel }: ReimbursementR
           </div>
 
           <div className="space-y-4">
+            {fileError && (
+              <Alert variant="destructive">
+                <AlertDescription>{fileError}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="receipt" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
@@ -190,9 +204,12 @@ export function ReimbursementRequestForm({ onSuccess, onCancel }: ReimbursementR
                 onChange={(e) => handleFileChange(e, 'receipt')}
               />
               {receiptFile && (
-                <p className="text-sm text-muted-foreground">
-                  Fichier sélectionné: {receiptFile.name}
-                </p>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span className="truncate">Fichier sélectionné: {receiptFile.name}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => clearFile('receipt')}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -209,9 +226,12 @@ export function ReimbursementRequestForm({ onSuccess, onCancel }: ReimbursementR
                 onChange={(e) => handleFileChange(e, 'rib')}
               />
               {ribFile && (
-                <p className="text-sm text-muted-foreground">
-                  Fichier sélectionné: {ribFile.name}
-                </p>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span className="truncate">Fichier sélectionné: {ribFile.name}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => clearFile('rib')}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
             </div>
           </div>
