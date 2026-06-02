@@ -11,10 +11,11 @@ export async function POST() {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    await seedCategories();
+    const count = await seedCategories();
 
-    return NextResponse.json({ 
-      message: "Catégories initialisées avec succès" 
+    return NextResponse.json({
+      message: "Catégories initialisées avec succès",
+      count,
     });
   } catch (error) {
     console.error("Categories seed error:", error);

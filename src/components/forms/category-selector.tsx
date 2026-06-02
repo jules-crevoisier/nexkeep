@@ -16,23 +16,26 @@ import {
 import { 
   Plus, 
   Trash2, 
-  Edit, 
   Briefcase, 
-  Laptop, 
   TrendingUp, 
   ShoppingBag, 
   Heart, 
-  ShoppingCart, 
   Car, 
   Home, 
-  BookOpen, 
   Gamepad2, 
-  Shirt, 
-  Smartphone, 
   Utensils, 
   Minus,
-  DollarSign
+  DollarSign,
+  Users,
+  Landmark,
+  PartyPopper,
+  Package,
+  Calendar,
+  Megaphone,
+  Receipt,
+  ArrowLeftRight,
 } from "lucide-react";
+import { TRANSFER_CATEGORY } from "@/lib/balances";
 
 interface Category {
   id: string;
@@ -48,23 +51,26 @@ interface CategorySelectorProps {
   type: "income" | "expense";
 }
 
-const iconMap: { [key: string]: React.ComponentType<{ className?: string }> } = {
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Briefcase,
-  Laptop,
   TrendingUp,
   ShoppingBag,
   Heart,
   Plus,
-  ShoppingCart,
   Car,
   Home,
-  BookOpen,
   Gamepad2,
-  Shirt,
-  Smartphone,
   Utensils,
   Minus,
-  DollarSign
+  DollarSign,
+  Users,
+  Landmark,
+  PartyPopper,
+  Package,
+  Calendar,
+  Megaphone,
+  Receipt,
+  ArrowLeftRight,
 };
 
 export function CategorySelector({ selectedCategory, onCategoryChange, type }: CategorySelectorProps) {
@@ -82,7 +88,12 @@ export function CategorySelector({ selectedCategory, onCategoryChange, type }: C
       const response = await fetch("/api/categories");
       if (response.ok) {
         const data = await response.json();
-        setCategories(data.filter((cat: Category) => cat.type === type));
+        setCategories(
+          data.filter(
+            (cat: Category) =>
+              cat.type === type && cat.name !== TRANSFER_CATEGORY
+          )
+        );
       }
     } catch (error) {
       console.error("Error fetching categories:", error);
