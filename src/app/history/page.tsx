@@ -8,9 +8,13 @@ import {
   Download,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
   Calendar,
   FileText,
-  Table as TableIcon
+  Table as TableIcon,
+  X
 } from "lucide-react";
 import {
   Table,
@@ -43,6 +47,77 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { Transaction, TransactionWithBudget, Category } from "@/types";
 
+type SortField = "type" | "name" | "amount" | "date" | "description" | "category" | "budget";
+type SortDirection = "asc" | "desc";
+
+function sortTransactionRows(
+  rows: TransactionWithBudget[],
+  field: SortField,
+  direction: SortDirection
+): TransactionWithBudget[] {
+  const factor = direction === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    switch (field) {
+      case "date":
+        return factor * (new Date(a.date).getTime() - new Date(b.date).getTime());
+      case "amount":
+        return factor * (a.amount - b.amount);
+      case "budget":
+        return factor * (a.budgetAfterTransaction - b.budgetAfterTransaction);
+      case "name":
+        return factor * a.name.localeCompare(b.name, "fr");
+      case "type":
+        return factor * a.type.localeCompare(b.type);
+      case "category":
+        return factor * (a.category ?? "").localeCompare(b.category ?? "", "fr");
+      case "description":
+        return factor * (a.description ?? "").localeCompare(b.description ?? "", "fr");
+      default:
+        return 0;
+    }
+  });
+}
+
+interface SortableTableHeadProps {
+  label: string;
+  field: SortField;
+  activeField: SortField;
+  direction: SortDirection;
+  onSort: (field: SortField) => void;
+  className?: string;
+}
+
+function SortableTableHead({
+  label,
+  field,
+  activeField,
+  direction,
+  onSort,
+  className,
+}: SortableTableHeadProps) {
+  const isActive = activeField === field;
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex items-center gap-1.5 font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm -ml-1 px-1"
+      >
+        {label}
+        {isActive ? (
+          direction === "asc" ? (
+            <ArrowUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          ) : (
+            <ArrowDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          )
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 shrink-0 opacity-40" aria-hidden />
+        )}
+      </button>
+    </TableHead>
+  );
+}
+
 export default function HistoryPage() {
   const { data: session } = useSession();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -56,6 +131,35 @@ export default function HistoryPage() {
   const [initialBudget, setInitialBudget] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortField(field);
+    const textFields: SortField[] = ["name", "description", "category"];
+    setSortDirection(textFields.includes(field) ? "asc" : "desc");
+  };
+
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    typeFilter !== "all" ||
+    dateFilter !== "all" ||
+    selectedCategory !== "all" ||
+    startDate !== "" ||
+    endDate !== "";
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setTypeFilter("all");
+    setDateFilter("all");
+    setSelectedCategory("all");
+    setStartDate("");
+    setEndDate("");
+  };
 
   const fetchUserData = async () => {
     try {
@@ -190,6 +294,12 @@ export default function HistoryPage() {
       budgetAfterTransaction: currentBudget
     };
   });
+
+  const displayTransactions = sortTransactionRows(
+    transactionsWithBudget,
+    sortField,
+    sortDirection
+  );
 
   const exportToXLSX = () => {
     // Trier les transactions par date pour l'export
@@ -410,110 +520,6 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Filtres */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtres</CardTitle>
-          <CardDescription>
-            Recherchez et filtrez vos transactions
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Budget initial - Lecture seule */}
-            <div className="flex items-center space-x-4 p-3 bg-muted/50 rounded-lg">
-              <label className="text-sm font-medium">Budget initial :</label>
-              <span className="text-lg font-semibold text-primary">
-                €{initialBudget.toFixed(2)}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                (Défini lors de l&apos;inscription)
-              </span>
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Rechercher une transaction..."
-                    className="pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              </div>
-              
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="Tous les types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les types</SelectItem>
-                  <SelectItem value="income">Revenus</SelectItem>
-                  <SelectItem value="expense">Dépenses</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="Toutes les catégories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les catégories</SelectItem>
-                  {categories.map((category: Category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      <div className="flex items-center space-x-2">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: category.color }}
-                        />
-                        <span>{category.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex flex-col md:flex-row gap-4">
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="Toutes les dates" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les dates</SelectItem>
-                  <SelectItem value="today">Aujourd&apos;hui</SelectItem>
-                  <SelectItem value="week">Cette semaine</SelectItem>
-                  <SelectItem value="month">Ce mois</SelectItem>
-                  <SelectItem value="year">Cette année</SelectItem>
-                  <SelectItem value="custom">Période personnalisée</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {dateFilter === "custom" && (
-                <>
-                  <Input
-                    type="date"
-                    placeholder="Date de début"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full md:w-48"
-                  />
-                  <Input
-                    type="date"
-                    placeholder="Date de fin"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full md:w-48"
-                  />
-                </>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Statistiques */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -567,12 +573,108 @@ export default function HistoryPage() {
       {/* Tableau des transactions */}
       <Card>
         <CardHeader>
-          <CardTitle>Liste des Transactions</CardTitle>
-          <CardDescription>
-            Historique complet de vos transactions financières ({filteredTransactions.length} transaction(s))
-          </CardDescription>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle>Liste des Transactions</CardTitle>
+              <CardDescription>
+                {filteredTransactions.length} transaction(s) — cliquez sur un en-tête pour trier
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+              <span>Budget initial :</span>
+              <span className="font-semibold text-primary">€{initialBudget.toFixed(2)}</span>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <p className="text-sm font-medium">Filtres</p>
+              {hasActiveFilters && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetFilters}
+                  className="h-8 px-2 text-muted-foreground"
+                >
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  Réinitialiser
+                </Button>
+              )}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="relative sm:col-span-2 lg:col-span-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher..."
+                  className="pl-9 h-9"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les types</SelectItem>
+                  <SelectItem value="income">Revenus</SelectItem>
+                  <SelectItem value="expense">Dépenses</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Catégorie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les catégories</SelectItem>
+                  {categories.map((category: Category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: category.color }}
+                        />
+                        <span>{category.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Période" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les dates</SelectItem>
+                  <SelectItem value="today">Aujourd&apos;hui</SelectItem>
+                  <SelectItem value="week">Cette semaine</SelectItem>
+                  <SelectItem value="month">Ce mois</SelectItem>
+                  <SelectItem value="year">Cette année</SelectItem>
+                  <SelectItem value="custom">Période personnalisée</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {dateFilter === "custom" && (
+              <div className="grid gap-3 sm:grid-cols-2 max-w-md">
+                <Input
+                  type="date"
+                  aria-label="Date de début"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-9"
+                />
+                <Input
+                  type="date"
+                  aria-label="Date de fin"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            )}
+          </div>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
               <Calendar className="h-8 w-8 mx-auto mb-4 opacity-50" />
@@ -585,20 +687,63 @@ export default function HistoryPage() {
               <p className="text-sm">Commencez par ajouter des transactions</p>
             </div>
           ) : (
+            <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Montant</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Catégorie</TableHead>
-                  <TableHead>Budget Après Transaction</TableHead>
+                  <SortableTableHead
+                    label="Type"
+                    field="type"
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Nom"
+                    field="name"
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Montant"
+                    field="amount"
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Date"
+                    field="date"
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Description"
+                    field="description"
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Catégorie"
+                    field="category"
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Budget après"
+                    field="budget"
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactionsWithBudget.map((transaction: TransactionWithBudget) => (
+                {displayTransactions.map((transaction: TransactionWithBudget) => (
                   <TableRow key={transaction.id}>
                     <TableCell>
                       <div className="flex items-center space-x-2">
@@ -664,6 +809,7 @@ export default function HistoryPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
