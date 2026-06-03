@@ -8,7 +8,7 @@ export default function RequestReimbursementPage() {
 
   useEffect(() => {
     // Redirect to the main reimbursements page
-    router.push('/reimbursements')
+    router.push('/tresorerie/reimbursements')
   }, [router])
 
   return (

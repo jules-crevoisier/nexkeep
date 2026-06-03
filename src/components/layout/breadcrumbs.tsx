@@ -7,6 +7,14 @@ import { ChevronRight, Home } from "lucide-react";
 /** Libellés lisibles pour les segments d'URL connus. */
 const LABELS: Record<string, string> = {
   "": "Dashboard",
+  tresorerie: "Trésorerie",
+  orga: "Organisation",
+  planning: "Planning",
+  projects: "Projets",
+  membres: "Membres",
+  tasks: "Tâches",
+  pole: "Pôle",
+  general: "Tâches générales",
   transactions: "Transactions",
   reimbursements: "Remboursements",
   liquide: "Liquide",

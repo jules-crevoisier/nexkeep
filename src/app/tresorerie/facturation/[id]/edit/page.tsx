@@ -95,14 +95,14 @@ export default function EditInvoicePage() {
         throw new Error('Erreur lors de la mise à jour de la facture');
       }
 
-      router.push(`/facturation/${params.id}`);
+      router.push(`/tresorerie/facturation/${params.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
     }
   };
 
   const handleCancel = () => {
-    router.push(`/facturation/${params.id}`);
+    router.push(`/tresorerie/facturation/${params.id}`);
   };
 
   if (loading) {

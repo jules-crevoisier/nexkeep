@@ -26,14 +26,14 @@ interface CommandRoute {
 }
 
 const ROUTES: CommandRoute[] = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard, keywords: "accueil home tableau" },
-  { name: "Transactions", href: "/transactions", icon: PlusCircle, keywords: "ajouter revenu depense" },
-  { name: "Remboursements", href: "/reimbursements", icon: CreditCard, keywords: "remboursement demande" },
-  { name: "Liquide", href: "/liquide", icon: Wallet, keywords: "caisse especes cash" },
-  { name: "Facturation", href: "/facturation", icon: FileText, keywords: "factures clients articles" },
-  { name: "Historique", href: "/history", icon: History, keywords: "transactions export" },
-  { name: "Rapports", href: "/reports", icon: BarChart3, keywords: "graphiques statistiques analyse" },
-  { name: "Paramètres", href: "/settings", icon: Settings, keywords: "profil theme securite" },
+  { name: "Dashboard", href: "/tresorerie", icon: LayoutDashboard, keywords: "accueil home tableau" },
+  { name: "Transactions", href: "/tresorerie/transactions", icon: PlusCircle, keywords: "ajouter revenu depense" },
+  { name: "Remboursements", href: "/tresorerie/reimbursements", icon: CreditCard, keywords: "remboursement demande" },
+  { name: "Liquide", href: "/tresorerie/liquide", icon: Wallet, keywords: "caisse especes cash" },
+  { name: "Facturation", href: "/tresorerie/facturation", icon: FileText, keywords: "factures clients articles" },
+  { name: "Historique", href: "/tresorerie/history", icon: History, keywords: "transactions export" },
+  { name: "Rapports", href: "/tresorerie/reports", icon: BarChart3, keywords: "graphiques statistiques analyse" },
+  { name: "Paramètres", href: "/tresorerie/settings", icon: Settings, keywords: "profil theme securite" },
 ];
 
 interface CommandPaletteProps {

@@ -140,7 +140,7 @@ export default function InvoiceDetailPage() {
         throw new Error('Erreur lors de la suppression');
       }
 
-      router.push('/facturation');
+      router.push('/tresorerie/facturation');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     }
@@ -215,7 +215,7 @@ export default function InvoiceDetailPage() {
             </Button>
             <Button 
               variant="outline" 
-              onClick={() => router.push(`/facturation/${invoice.id}/edit`)}
+              onClick={() => router.push(`/tresorerie/facturation/${invoice.id}/edit`)}
               className="flex items-center gap-2"
             >
               <Edit className="w-4 h-4" />

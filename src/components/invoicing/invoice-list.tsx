@@ -247,7 +247,7 @@ export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push(`/facturation/${invoice.id}`)}
+                    onClick={() => router.push(`/tresorerie/facturation/${invoice.id}`)}
                     className="flex items-center gap-2"
                   >
                     <Eye className="w-4 h-4" />
@@ -256,7 +256,7 @@ export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push(`/facturation/${invoice.id}/edit`)}
+                    onClick={() => router.push(`/tresorerie/facturation/${invoice.id}/edit`)}
                     className="flex items-center gap-2"
                   >
                     <Edit className="w-4 h-4" />

@@ -33,42 +33,42 @@ import {
 const navigation = [
   {
     name: "Dashboard",
-    href: "/",
+    href: "/tresorerie",
     icon: LayoutDashboard,
   },
   {
     name: "Transactions",
-    href: "/transactions",
+    href: "/tresorerie/transactions",
     icon: PlusCircle,
   },
   {
     name: "Remboursements",
-    href: "/reimbursements",
+    href: "/tresorerie/reimbursements",
     icon: CreditCard,
   },
   {
     name: "Liquide",
-    href: "/liquide",
+    href: "/tresorerie/liquide",
     icon: Wallet,
   },
   {
     name: "Facturation",
-    href: "/facturation",
+    href: "/tresorerie/facturation",
     icon: FileText,
   },
   {
     name: "Historique",
-    href: "/history",
+    href: "/tresorerie/history",
     icon: History,
   },
   {
     name: "Rapports",
-    href: "/reports",
+    href: "/tresorerie/reports",
     icon: BarChart3,
   },
   {
     name: "Paramètres",
-    href: "/settings",
+    href: "/tresorerie/settings",
     icon: Settings,
   },
 ];

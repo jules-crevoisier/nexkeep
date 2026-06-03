@@ -17,6 +17,8 @@ import { DATA_UPDATED_EVENT } from "@/lib/events";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Transaction } from "@/types";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 export default function DashboardPage() {
   const { data: session } = useSession();
@@ -99,28 +101,9 @@ export default function DashboardPage() {
     .sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <Wallet className="h-12 w-12 mx-auto mb-4 text-primary" />
-            <CardTitle>Accès requis</CardTitle>
-            <CardDescription>
-              Connectez-vous pour accéder à votre dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button className="w-full" onClick={() => window.location.href = "/login"}>
-              Se connecter
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
+    <AuthGuard>
+      <DashboardLayout>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -132,7 +115,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex space-x-2">
           <Button asChild>
-            <Link href="/transactions">
+            <Link href="/tresorerie/transactions">
               <PlusCircle className="mr-2 h-4 w-4" />
               Nouvelle Transaction
             </Link>
@@ -227,7 +210,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <Button asChild className="w-full">
-              <Link href="/transactions">
+              <Link href="/tresorerie/transactions">
                 Ajouter une transaction
               </Link>
             </Button>
@@ -246,7 +229,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <Button asChild variant="outline" className="w-full">
-              <Link href="/history">
+              <Link href="/tresorerie/history">
                 Voir l&apos;historique
               </Link>
             </Button>
@@ -265,7 +248,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <Button asChild variant="outline" className="w-full">
-              <Link href="/reports">
+              <Link href="/tresorerie/reports">
                 Voir les rapports
               </Link>
             </Button>
@@ -327,5 +310,7 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+      </DashboardLayout>
+    </AuthGuard>
   );
 }

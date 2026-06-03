@@ -91,7 +91,7 @@ export function ReimbursementRequestForm({ onSuccess, onCancel }: ReimbursementR
       if (onSuccess) {
         onSuccess()
       } else {
-        router.push('/reimbursements')
+        router.push('/tresorerie/reimbursements')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Une erreur est survenue'

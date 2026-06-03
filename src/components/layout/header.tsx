@@ -12,7 +12,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link href="/" className="flex items-center space-x-2">
+          <Link href="/tresorerie" className="flex items-center space-x-2">
             <Wallet className="h-6 w-6" />
             <span className="text-lg font-semibold">NexKeep</span>
           </Link>
@@ -20,13 +20,13 @@ export function Header() {
         
         {session ? (
           <nav className="flex items-center space-x-2">
-            <Link href="/">
+            <Link href="/tresorerie">
               <Button variant="ghost" size="sm">
                 <Wallet className="mr-2 h-4 w-4" />
                 Budget
               </Button>
             </Link>
-            <Link href="/history">
+            <Link href="/tresorerie/history">
               <Button variant="ghost" size="sm">
                 <History className="mr-2 h-4 w-4" />
                 Historique

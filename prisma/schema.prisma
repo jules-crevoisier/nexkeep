@@ -28,7 +28,11 @@ model User {
   clients Client[]
   articles Article[]
   invoices Invoice[]
-  
+  projects Project[]
+  tasks Task[]
+  statuses Status[]
+  members Member[]
+
   @@map("users")
 }
 
@@ -216,6 +220,124 @@ model InvoiceItem {
   
   articleId String?
   article   Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
-  
+
   @@map("invoice_items")
+}
+
+// Modeles pour le module Organisation / Taches
+model Project {
+  id          String    @id @default(cuid())
+  name        String    // Nom du projet
+  description String?   // Description
+  color       String?   // Couleur hexadecimale (pastille)
+  status      String    @default("active") // "active" ou "archived"
+  budget      Float?    // Budget total du projet (optionnel)
+  endDate     DateTime? // Date de fin / echeance du projet
+  position    Int       @default(0) // Ordre d'affichage
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tasks  Task[]
+  groups TaskGroup[]
+
+  @@map("projects")
+}
+
+model TaskGroup {
+  id        String   @id @default(cuid())
+  name      String   // Nom du pole / groupe
+  color     String   @default("#64748b")
+  budget    Float?   // Budget alloue au groupe (optionnel)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tasks Task[]
+
+  @@map("task_groups")
+}
+
+model Task {
+  id            String    @id @default(cuid())
+  title         String    // Titre de la tache
+  description   String?   // Description detaillee
+  priority      String    @default("medium")  // "low", "medium", "high", "urgent"
+  blockingPoint String?   // Point bloquant (visible si statut.isBlocked)
+  dueDate       DateTime? // Echeance
+  position      Int       @default(0) // Ordre dans la colonne Kanban
+  completedAt   DateTime? // Date de completion
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId String?  // null = "tache courante" (inbox)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  statusId String?  // statut personnalise (workflow de l'utilisateur)
+  status   Status?  @relation(fields: [statusId], references: [id], onDelete: SetNull)
+
+  groupId String?    // pole / groupe au sein du projet
+  group   TaskGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  parentId String?  // sous-tache d'une tache parente
+  parent   Task?    @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks Task[]   @relation("Subtasks")
+
+  assignees TaskAssignee[]
+
+  @@map("tasks")
+}
+
+model Status {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#64748b")
+  position  Int      @default(0)
+  isDefault Boolean  @default(false) // statut initial des nouvelles taches
+  isDone    Boolean  @default(false) // marque la completion (completedAt)
+  isBlocked Boolean  @default(false) // affiche le champ "point bloquant"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tasks Task[]
+
+  @@map("statuses")
+}
+
+model Member {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  color     String   @default("#3b82f6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assignments TaskAssignee[]
+
+  @@map("members")
+}
+
+model TaskAssignee {
+  taskId   String
+  memberId String
+
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, memberId])
+  @@map("task_assignees")
 }

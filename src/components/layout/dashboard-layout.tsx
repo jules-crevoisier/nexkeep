@@ -7,14 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Sidebar } from "./sidebar";
 import { Breadcrumbs } from "./breadcrumbs";
 import { CommandPalette } from "./command-palette";
+import { ModuleSwitcher } from "./module-switcher";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-/** Libellés de page pour l'en-tête mobile (premier segment d'URL). */
+/** Libellés de page pour l'en-tête mobile. */
 const PAGE_TITLES: Record<string, string> = {
   "": "Dashboard",
+  tresorerie: "Trésorerie",
   transactions: "Transactions",
   reimbursements: "Remboursements",
   liquide: "Liquide",
@@ -29,11 +31,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const pathname = usePathname();
 
-  const firstSegment = pathname.split("/").filter(Boolean)[0] ?? "";
-  const pageTitle = PAGE_TITLES[firstSegment] ?? "NexKeep";
+  const segments = pathname.split("/").filter(Boolean);
+  // Titre = segment connu le plus profond (ex: /tresorerie/transactions -> Transactions)
+  const pageTitle =
+    [...segments].reverse().map((s) => PAGE_TITLES[s]).find(Boolean) ??
+    PAGE_TITLES[""] ??
+    "NexKeep";
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background">
+      <ModuleSwitcher />
+      <div className="flex flex-1 overflow-hidden">
       <Sidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
@@ -67,6 +75,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
           </div>
         </main>
+      </div>
       </div>
     </div>
   );
