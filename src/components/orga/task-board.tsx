@@ -3,8 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { Plus, List, KanbanSquare, CalendarDays, SlidersHorizontal } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useGuardedAction } from "@/hooks/use-guarded-action";
+import { GuardedActionDialog } from "@/components/permissions/guarded-action-dialog";
+import { RestrictedButton } from "@/components/permissions/restricted-button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,6 +77,8 @@ export function TaskBoard({
   defaultHideDone = false,
 }: TaskBoardProps) {
   const { data: session } = useSession();
+  const { canEditOrga, orgaDeniedMessage } = usePermissions();
+  const orgaGuard = useGuardedAction(canEditOrga, orgaDeniedMessage);
   const [view, setView] = useState<ViewMode>("list");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -192,19 +197,6 @@ export function TaskBoard({
     }
   };
 
-  const handleToggleDone = (task: Task) => {
-    const doneStatus = statuses.find((s) => s.isDone);
-    const defaultStatus = statuses.find((s) => s.isDefault) ?? statuses[0];
-    const isDone = task.status?.isDone;
-    const target = isDone ? defaultStatus : doneStatus;
-    if (!target) return;
-    patchTask(
-      task,
-      { statusId: target.id },
-      { statusId: target.id, status: target, completedAt: target.isDone ? new Date().toISOString() : null }
-    );
-  };
-
   const applyStatusChange = (
     task: Task,
     target: Status,
@@ -222,7 +214,7 @@ export function TaskBoard({
     );
   };
 
-  const handleStatusChange = (task: Task, statusId: string) => {
+  const handleStatusChange = orgaGuard.guard((task: Task, statusId: string) => {
     const target = statuses.find((s) => s.id === statusId);
     if (!target) return;
     if (target.isBlocked) {
@@ -230,7 +222,7 @@ export function TaskBoard({
       return;
     }
     applyStatusChange(task, target);
-  };
+  });
 
   const confirmBlocking = (blockingPoint: string) => {
     if (!blockingTarget) return;
@@ -240,7 +232,7 @@ export function TaskBoard({
     setBlockingTarget(null);
   };
 
-  const handleToggleSubtask = (subtask: Task) => {
+  const handleToggleSubtask = orgaGuard.guard((subtask: Task) => {
     const doneStatus = statuses.find((s) => s.isDone);
     const defaultStatus = statuses.find((s) => s.isDefault) ?? statuses[0];
     const target = subtask.status?.isDone ? defaultStatus : doneStatus;
@@ -267,17 +259,34 @@ export function TaskBoard({
         console.error("Error updating subtask:", e);
         fetchTasks();
       });
-  };
+  });
 
-  const handleEdit = (task: Task) => {
+  const handleEdit = orgaGuard.guard((task: Task) => {
     setEditingTask(task);
     setDialogOpen(true);
-  };
+  });
 
-  const handleNew = () => {
+  const handleNew = orgaGuard.run(() => {
     setEditingTask(null);
     setDialogOpen(true);
-  };
+  });
+
+  const handleDeleteRequest = orgaGuard.guard((task: Task) => {
+    setDeleteTarget(task);
+  });
+
+  const handleToggleDone = orgaGuard.guard((task: Task) => {
+    const doneStatus = statuses.find((s) => s.isDone);
+    const defaultStatus = statuses.find((s) => s.isDefault) ?? statuses[0];
+    const isDone = task.status?.isDone;
+    const target = isDone ? defaultStatus : doneStatus;
+    if (!target) return;
+    patchTask(
+      task,
+      { statusId: target.id },
+      { statusId: target.id, status: target, completedAt: target.isDone ? new Date().toISOString() : null }
+    );
+  });
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -315,14 +324,23 @@ export function TaskBoard({
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setStatusManagerOpen(true)}>
+          <RestrictedButton
+            variant="outline"
+            allowed={canEditOrga}
+            deniedMessage={orgaDeniedMessage}
+            onClick={() => setStatusManagerOpen(true)}
+          >
             <SlidersHorizontal className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Statuts</span>
-          </Button>
-          <Button onClick={handleNew}>
+          </RestrictedButton>
+          <RestrictedButton
+            allowed={canEditOrga}
+            deniedMessage={orgaDeniedMessage}
+            onClick={handleNew}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nouvelle tâche
-          </Button>
+          </RestrictedButton>
         </div>
       </div>
 
@@ -347,7 +365,7 @@ export function TaskBoard({
           defaultHideDone={defaultHideDone}
           defaultSort={defaultSort}
           onEdit={handleEdit}
-          onDelete={setDeleteTarget}
+          onDelete={handleDeleteRequest}
           onToggleDone={handleToggleDone}
           onToggleSubtask={handleToggleSubtask}
         />
@@ -357,7 +375,7 @@ export function TaskBoard({
           statuses={statuses}
           showProject={showProject}
           onEdit={handleEdit}
-          onDelete={setDeleteTarget}
+          onDelete={handleDeleteRequest}
           onToggleDone={handleToggleDone}
           onToggleSubtask={handleToggleSubtask}
           onStatusChange={handleStatusChange}
@@ -418,6 +436,12 @@ export function TaskBoard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <GuardedActionDialog
+        open={orgaGuard.deniedOpen}
+        onOpenChange={orgaGuard.setDeniedOpen}
+        message={orgaGuard.deniedMessage}
+      />
     </div>
   );
 }

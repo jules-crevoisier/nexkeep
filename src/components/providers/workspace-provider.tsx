@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 
 export type WorkspaceRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
 export type TreasuryAccess = "NONE" | "READ" | "WRITE";
+export type OrgaScope = "FULL" | "PROJECTS_ONLY";
 
 export interface WorkspaceSummary {
   id: string;
   name: string;
   role: WorkspaceRole;
   treasuryAccess: TreasuryAccess;
+  orgaScope: OrgaScope;
+  canAccessInbox: boolean;
   memberCount: number;
 }
 
@@ -20,6 +23,8 @@ export interface ActiveWorkspace {
   name: string;
   role: WorkspaceRole;
   treasuryAccess: TreasuryAccess;
+  orgaScope: OrgaScope;
+  canAccessInbox: boolean;
 }
 
 export interface PendingInvitation {

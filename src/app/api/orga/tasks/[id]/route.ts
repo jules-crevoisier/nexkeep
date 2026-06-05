@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity";
 import { taskInclude, setAssignees } from "@/lib/orga-task";
+import {
+  assertInboxAccess,
+  assertProjectWriteAccess,
+  assertTaskAccess,
+} from "@/lib/orga-access";
 import { requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // PATCH /api/orga/tasks/[id]
@@ -20,6 +25,8 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Tâche non trouvée" }, { status: 404 });
     }
+
+    await assertTaskAccess(ctx, existing, true);
 
     const body = await request.json();
     const data: Record<string, unknown> = {};
@@ -50,7 +57,6 @@ export async function PATCH(
       }
     }
 
-    // Changement de projet : vérifier l'appartenance
     if (body.projectId !== undefined) {
       if (body.projectId) {
         const project = await prisma.project.findFirst({
@@ -59,8 +65,10 @@ export async function PATCH(
         if (!project) {
           return NextResponse.json({ error: "Projet invalide" }, { status: 400 });
         }
+        await assertProjectWriteAccess(ctx, body.projectId);
         data.projectId = body.projectId;
       } else {
+        assertInboxAccess(ctx);
         data.projectId = null;
       }
     }
@@ -129,6 +137,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Tâche non trouvée" }, { status: 404 });
     }
 
+    await assertTaskAccess(ctx, existing, true);
     await prisma.task.delete({ where: { id } });
     return NextResponse.json({ message: "Tâche supprimée" });
   } catch (error) {

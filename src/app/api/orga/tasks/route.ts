@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getDefaultStatusId } from "@/lib/orga-statuses";
 import { taskInclude, setAssignees } from "@/lib/orga-task";
+import {
+  assertInboxAccess,
+  assertProjectReadAccess,
+  assertProjectWriteAccess,
+  buildVisibleTasksWhere,
+  canMemberAccessInbox,
+} from "@/lib/orga-access";
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/tasks?projectId=...&status=...&scope=inbox|all
@@ -15,30 +22,34 @@ export async function GET(request: NextRequest) {
     const scope = searchParams.get("scope");
     const groupId = searchParams.get("groupId");
 
-    const where: {
-      workspaceId: string;
+    const baseWhere: {
       projectId?: string | null;
       statusId?: string;
       groupId?: string | null;
       parentId: null;
-    } = { workspaceId: ctx.workspace.id, parentId: null }; // sous-tâches exclues du board
+    } = { parentId: null };
 
     if (projectId) {
-      where.projectId = projectId;
+      await assertProjectReadAccess(ctx, projectId);
+      baseWhere.projectId = projectId;
     } else if (scope === "inbox") {
-      where.projectId = null; // tâches courantes (sans projet)
+      if (!canMemberAccessInbox(ctx)) {
+        return NextResponse.json([]);
+      }
+      baseWhere.projectId = null;
     }
 
-    // Filtre par pôle : id réel, ou "none" pour les tâches générales du projet.
     if (groupId === "none") {
-      where.groupId = null;
+      baseWhere.groupId = null;
     } else if (groupId) {
-      where.groupId = groupId;
+      baseWhere.groupId = groupId;
     }
 
     if (statusId && statusId !== "all") {
-      where.statusId = statusId;
+      baseWhere.statusId = statusId;
     }
+
+    const where = buildVisibleTasksWhere(ctx, baseWhere);
 
     const tasks = await prisma.task.findMany({
       where,
@@ -79,7 +90,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Titre requis" }, { status: 400 });
     }
 
-    // Vérifier l'appartenance du projet
     if (projectId) {
       const project = await prisma.project.findFirst({
         where: { id: projectId, workspaceId },
@@ -87,6 +97,9 @@ export async function POST(request: NextRequest) {
       if (!project) {
         return NextResponse.json({ error: "Projet invalide" }, { status: 400 });
       }
+      await assertProjectWriteAccess(ctx, projectId);
+    } else {
+      assertInboxAccess(ctx);
     }
 
     // Vérifier l'appartenance du groupe (au projet de l'organisation)

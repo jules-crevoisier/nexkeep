@@ -102,6 +102,8 @@ export async function acceptInvitationForUser(
       userId,
       role: invitation.role,
       treasuryAccess: invitation.treasuryAccess,
+      orgaScope: invitation.orgaScope,
+      canAccessInbox: invitation.canAccessInbox,
     },
   })
 

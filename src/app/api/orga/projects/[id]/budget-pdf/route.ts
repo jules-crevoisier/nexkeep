@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateBudgetPreviewPdfBuffer, safeBudgetFilename } from '@/lib/orga-budget-pdf'
+import { assertProjectReadAccess } from '@/lib/orga-access'
 import { requireWorkspace, workspaceErrorResponse } from '@/lib/workspace'
 
 export const runtime = 'nodejs'
@@ -20,6 +21,8 @@ export async function GET(
     if (!project) {
       return NextResponse.json({ error: 'Projet non trouve' }, { status: 404 })
     }
+
+    await assertProjectReadAccess(ctx, id)
 
     const groups = await prisma.taskGroup.findMany({
       where: { projectId: id },

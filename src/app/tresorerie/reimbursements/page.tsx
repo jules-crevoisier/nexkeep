@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { safeParseJson } from '@/lib/api-utils'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { usePermissions } from '@/hooks/use-permissions'
+import { useGuardedAction } from '@/hooks/use-guarded-action'
+import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog'
+import { RestrictedButton } from '@/components/permissions/restricted-button'
+import { ReaderModeBanner } from '@/components/permissions/reader-mode-banner'
 import { ReimbursementRequestForm } from '@/components/forms/reimbursement-request-form'
 import { ReimbursementList } from '@/components/reimbursements/reimbursement-list'
 import { ReimbursementPaymentForm } from '@/components/reimbursements/reimbursement-payment-form'
@@ -38,6 +42,8 @@ interface ReimbursementRequest {
 }
 
 export default function ReimbursementsPage() {
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions()
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<ReimbursementRequest | null>(null)
@@ -56,14 +62,18 @@ export default function ReimbursementsPage() {
     setRefreshKey(prev => prev + 1) // Force refresh of the list
   }
 
-  const handleViewDetails = (request: ReimbursementRequest) => {
+  const handleViewDetails = treasuryGuard.guard((request: ReimbursementRequest) => {
     setSelectedRequest(request)
     setShowPaymentForm(true)
-  }
+  })
 
-  const handleDelete = (id: string) => {
-    setRefreshKey(prev => prev + 1) // Force refresh of the list
-  }
+  const handleDelete = treasuryGuard.guard((id: string) => {
+    setRefreshKey(prev => prev + 1)
+  })
+
+  const openCreateForm = treasuryGuard.run(() => {
+    setShowCreateForm(true)
+  })
 
   // Charger les demandes pour les statistiques
   useEffect(() => {
@@ -98,6 +108,8 @@ export default function ReimbursementsPage() {
       <div className="flex min-h-screen">
         <Sidebar />
         <div className="flex-1 p-6 space-y-6">
+      <ReaderModeBanner mode="treasury" />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -110,13 +122,16 @@ export default function ReimbursementsPage() {
         <div className="flex gap-3">
           <ShareButton />
           
+          <RestrictedButton
+            allowed={canWriteTreasury}
+            deniedMessage={treasuryDeniedMessage}
+            onClick={openCreateForm}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nouvelle demande
+          </RestrictedButton>
+
           <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Nouvelle demande
-              </Button>
-            </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Nouvelle demande de remboursement</DialogTitle>
@@ -245,6 +260,12 @@ export default function ReimbursementsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <GuardedActionDialog
+        open={treasuryGuard.deniedOpen}
+        onOpenChange={treasuryGuard.setDeniedOpen}
+        message={treasuryGuard.deniedMessage}
+      />
         </div>
       </div>
     </AuthGuard>

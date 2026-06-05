@@ -9,6 +9,7 @@ import { Breadcrumbs } from "./breadcrumbs";
 import { CommandPalette } from "./command-palette";
 import { ModuleSwitcher } from "./module-switcher";
 import { useWorkspace } from "@/components/providers/workspace-provider";
+import { ReaderModeBanner } from "@/components/permissions/reader-mode-banner";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -80,6 +81,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <main className="flex-1 overflow-auto">
           <div className="space-y-4 p-4 sm:p-6 lg:p-8">
             <Breadcrumbs />
+            <ReaderModeBanner mode="treasury" />
             <div key={pathname} className="animate-in fade-in duration-300">
               {children}
             </div>

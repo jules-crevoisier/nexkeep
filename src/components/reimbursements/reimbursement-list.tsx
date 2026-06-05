@@ -5,6 +5,10 @@ import { safeParseJson, parseApiError } from '@/lib/api-utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { usePermissions } from '@/hooks/use-permissions'
+import { useGuardedAction } from '@/hooks/use-guarded-action'
+import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog'
+import { RestrictedButton } from '@/components/permissions/restricted-button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { 
@@ -51,6 +55,8 @@ interface ReimbursementListProps {
 }
 
 export function ReimbursementList({ onViewDetails, onDelete, statusFilter }: ReimbursementListProps) {
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions()
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage)
   const [requests, setRequests] = useState<ReimbursementRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -88,7 +94,7 @@ export function ReimbursementList({ onViewDetails, onDelete, statusFilter }: Rei
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = treasuryGuard.guard(async (id: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette demande ?')) return
     
     try {
@@ -105,7 +111,7 @@ export function ReimbursementList({ onViewDetails, onDelete, statusFilter }: Rei
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la suppression')
     }
-  }
+  })
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -235,22 +241,26 @@ export function ReimbursementList({ onViewDetails, onDelete, statusFilter }: Rei
 
                 <div className="flex gap-2 ml-4">
                   {onViewDetails && (
-                    <Button
+                    <RestrictedButton
                       variant="outline"
                       size="sm"
+                      allowed={canWriteTreasury}
+                      deniedMessage={treasuryDeniedMessage}
                       onClick={() => onViewDetails(request)}
                     >
                       <Eye className="h-4 w-4" />
-                    </Button>
+                    </RestrictedButton>
                   )}
                   {onDelete && request.status === 'pending' && (
-                    <Button
+                    <RestrictedButton
                       variant="outline"
                       size="sm"
+                      allowed={canWriteTreasury}
+                      deniedMessage={treasuryDeniedMessage}
                       onClick={() => handleDelete(request.id)}
                     >
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </RestrictedButton>
                   )}
                 </div>
               </div>
@@ -258,6 +268,11 @@ export function ReimbursementList({ onViewDetails, onDelete, statusFilter }: Rei
           </Card>
         )
       })}
+      <GuardedActionDialog
+        open={treasuryGuard.deniedOpen}
+        onOpenChange={treasuryGuard.setDeniedOpen}
+        message={treasuryGuard.deniedMessage}
+      />
     </div>
   )
 }

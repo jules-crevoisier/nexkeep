@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseAndValidateAmount } from "@/lib/api-utils";
+import { assertProjectReadAccess, assertProjectWriteAccess } from "@/lib/orga-access";
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/groups?projectId=... - Liste des groupes d'un projet
@@ -20,6 +21,8 @@ export async function GET(request: NextRequest) {
     if (!project) {
       return NextResponse.json({ error: "Projet non trouvé" }, { status: 404 });
     }
+
+    await assertProjectReadAccess(ctx, projectId);
 
     const groups = await prisma.taskGroup.findMany({
       where: { projectId },
@@ -56,6 +59,8 @@ export async function POST(request: NextRequest) {
     if (!project) {
       return NextResponse.json({ error: "Projet non trouvé" }, { status: 404 });
     }
+
+    await assertProjectWriteAccess(ctx, projectId);
 
     let budgetValue: number | null = null;
     if (budget !== undefined && budget !== null && budget !== "") {

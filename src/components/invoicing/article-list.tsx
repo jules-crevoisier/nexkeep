@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useGuardedAction } from '@/hooks/use-guarded-action';
+import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog';
+import { RestrictedButton } from '@/components/permissions/restricted-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -37,6 +41,8 @@ interface ArticleListProps {
 }
 
 export function ArticleList({ onSelect, showActions = true, showSearch = true }: ArticleListProps) {
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions();
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage);
   const [articles, setArticles] = useState<Article[]>([]);
   const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,17 +87,17 @@ export function ArticleList({ onSelect, showActions = true, showSearch = true }:
     }
   }, [searchTerm, articles]);
 
-  const handleCreate = () => {
+  const handleCreate = treasuryGuard.run(() => {
     setEditingArticle(null);
     setShowForm(true);
-  };
+  });
 
-  const handleEdit = (article: Article) => {
+  const handleEdit = treasuryGuard.guard((article: Article) => {
     setEditingArticle(article);
     setShowForm(true);
-  };
+  });
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = treasuryGuard.guard(async (id: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cet article ?')) {
       return;
     }
@@ -109,7 +115,7 @@ export function ArticleList({ onSelect, showActions = true, showSearch = true }:
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     }
-  };
+  });
 
   const handleSave = async (articleData: Article) => {
     try {
@@ -181,10 +187,15 @@ export function ArticleList({ onSelect, showActions = true, showSearch = true }:
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Articles</h2>
         {showActions && (
-          <Button onClick={handleCreate} className="flex items-center gap-2">
+          <RestrictedButton
+            allowed={canWriteTreasury}
+            deniedMessage={treasuryDeniedMessage}
+            onClick={handleCreate}
+            className="flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             Nouvel article
-          </Button>
+          </RestrictedButton>
         )}
       </div>
 
@@ -214,10 +225,15 @@ export function ArticleList({ onSelect, showActions = true, showSearch = true }:
               }
             </p>
             {showActions && !searchTerm && (
-              <Button onClick={handleCreate} className="flex items-center gap-2">
+              <RestrictedButton
+                allowed={canWriteTreasury}
+                deniedMessage={treasuryDeniedMessage}
+                onClick={handleCreate}
+                className="flex items-center gap-2"
+              >
                 <Plus className="w-4 h-4" />
                 Créer un article
-              </Button>
+              </RestrictedButton>
             )}
           </CardContent>
         </Card>
@@ -246,19 +262,23 @@ export function ArticleList({ onSelect, showActions = true, showSearch = true }:
                   </div>
                   {showActions && (
                     <div className="flex gap-1">
-                      <Button
+                      <RestrictedButton
                         size="sm"
                         variant="ghost"
+                        allowed={canWriteTreasury}
+                        deniedMessage={treasuryDeniedMessage}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEdit(article);
                         }}
                       >
                         <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
+                      </RestrictedButton>
+                      <RestrictedButton
                         size="sm"
                         variant="ghost"
+                        allowed={canWriteTreasury}
+                        deniedMessage={treasuryDeniedMessage}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(article.id);
@@ -266,7 +286,7 @@ export function ArticleList({ onSelect, showActions = true, showSearch = true }:
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </Button>
+                      </RestrictedButton>
                     </div>
                   )}
                 </div>
@@ -314,6 +334,11 @@ export function ArticleList({ onSelect, showActions = true, showSearch = true }:
           ))}
         </div>
       )}
+      <GuardedActionDialog
+        open={treasuryGuard.deniedOpen}
+        onOpenChange={treasuryGuard.setDeniedOpen}
+        message={treasuryGuard.deniedMessage}
+      />
     </div>
   );
 }

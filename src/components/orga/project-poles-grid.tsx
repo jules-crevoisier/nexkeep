@@ -11,7 +11,10 @@ import {
   ChevronRight,
   Wallet,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useGuardedAction } from "@/hooks/use-guarded-action";
+import { GuardedActionDialog } from "@/components/permissions/guarded-action-dialog";
+import { RestrictedButton } from "@/components/permissions/restricted-button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +36,8 @@ interface ProjectPolesGridProps {
 const fmt = (v: number) => `€${v.toFixed(2)}`;
 
 export function ProjectPolesGrid({ projectId }: ProjectPolesGridProps) {
+  const { canEditOrga, orgaDeniedMessage } = usePermissions();
+  const orgaGuard = useGuardedAction(canEditOrga, orgaDeniedMessage);
   const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [generalCount, setGeneralCount] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -65,16 +70,21 @@ export function ProjectPolesGrid({ projectId }: ProjectPolesGridProps) {
     return () => window.removeEventListener(ORGA_DATA_UPDATED_EVENT, handler);
   }, [fetchGroups]);
 
-  const handleNew = () => {
+  const handleNew = orgaGuard.run(() => {
     setEditing(null);
     setDialogOpen(true);
-  };
+  });
 
-  const handleEdit = (e: React.MouseEvent, group: TaskGroup) => {
+  const handleEdit = orgaGuard.guard((e: React.MouseEvent, group: TaskGroup) => {
     e.preventDefault();
     setEditing(group);
     setDialogOpen(true);
-  };
+  });
+
+  const handleDeleteRequest = orgaGuard.guard((e: React.MouseEvent, group: TaskGroup) => {
+    e.preventDefault();
+    setDeleteTarget(group);
+  });
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -100,10 +110,16 @@ export function ProjectPolesGrid({ projectId }: ProjectPolesGridProps) {
             ({groups.length})
           </span>
         </h2>
-        <Button variant="outline" size="sm" onClick={handleNew}>
+        <RestrictedButton
+          variant="outline"
+          size="sm"
+          allowed={canEditOrga}
+          deniedMessage={orgaDeniedMessage}
+          onClick={handleNew}
+        >
           <Plus className="mr-1 h-4 w-4" />
           Nouveau pôle
-        </Button>
+        </RestrictedButton>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -156,10 +172,7 @@ export function ProjectPolesGrid({ projectId }: ProjectPolesGridProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setDeleteTarget(g);
-                  }}
+                  onClick={(e) => handleDeleteRequest(e, g)}
                   className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-red-600 group-hover:opacity-100"
                   aria-label={`Supprimer ${g.name}`}
                 >
@@ -189,7 +202,7 @@ export function ProjectPolesGrid({ projectId }: ProjectPolesGridProps) {
         <button
           type="button"
           onClick={handleNew}
-          className="flex min-h-[112px] flex-col items-center justify-center gap-1 rounded-xl border border-dashed text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+          className={`flex min-h-[112px] flex-col items-center justify-center gap-1 rounded-xl border border-dashed text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground ${!canEditOrga ? "opacity-50" : ""}`}
         >
           <Plus className="h-5 w-5" />
           <span className="text-sm font-medium">Ajouter un pôle</span>
@@ -230,6 +243,12 @@ export function ProjectPolesGrid({ projectId }: ProjectPolesGridProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <GuardedActionDialog
+        open={orgaGuard.deniedOpen}
+        onOpenChange={orgaGuard.setDeniedOpen}
+        message={orgaGuard.deniedMessage}
+      />
     </section>
   );
 }

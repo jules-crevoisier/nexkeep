@@ -10,6 +10,8 @@ export async function GET() {
       name: ctx.workspace.name,
       role: ctx.role,
       treasuryAccess: ctx.treasuryAccess,
+      orgaScope: ctx.membership.orgaScope,
+      canAccessInbox: ctx.membership.canAccessInbox,
       budget: ctx.workspace.budget,
       budgetInitial: ctx.workspace.budgetInitial,
       cashInitial: ctx.workspace.cashInitial,

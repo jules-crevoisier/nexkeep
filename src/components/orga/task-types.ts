@@ -76,6 +76,7 @@ export interface Project {
   budget: number | null;
   endDate: string | null;
   position: number;
+  isRestricted?: boolean;
   createdAt: string;
   updatedAt: string;
   _count?: { tasks: number };

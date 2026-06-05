@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useGuardedAction } from '@/hooks/use-guarded-action';
+import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog';
+import { RestrictedButton } from '@/components/permissions/restricted-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -41,6 +45,8 @@ interface OrganisationListProps {
 }
 
 export function OrganisationList({ onSelect, showActions = true }: OrganisationListProps) {
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions();
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage);
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,17 +75,17 @@ export function OrganisationList({ onSelect, showActions = true }: OrganisationL
     fetchOrganisations();
   }, []);
 
-  const handleCreate = () => {
+  const handleCreate = treasuryGuard.run(() => {
     setEditingOrganisation(null);
     setShowForm(true);
-  };
+  });
 
-  const handleEdit = (organisation: Organisation) => {
+  const handleEdit = treasuryGuard.guard((organisation: Organisation) => {
     setEditingOrganisation(organisation);
     setShowForm(true);
-  };
+  });
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = treasuryGuard.guard(async (id: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette organisation ?')) {
       return;
     }
@@ -97,7 +103,7 @@ export function OrganisationList({ onSelect, showActions = true }: OrganisationL
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     }
-  };
+  });
 
   const handleSave = async (organisationData: Organisation) => {
     try {
@@ -164,10 +170,15 @@ export function OrganisationList({ onSelect, showActions = true }: OrganisationL
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Organisations</h2>
         {showActions && (
-          <Button onClick={handleCreate} className="flex items-center gap-2">
+          <RestrictedButton
+            allowed={canWriteTreasury}
+            deniedMessage={treasuryDeniedMessage}
+            onClick={handleCreate}
+            className="flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             Nouvelle organisation
-          </Button>
+          </RestrictedButton>
         )}
       </div>
 
@@ -180,10 +191,15 @@ export function OrganisationList({ onSelect, showActions = true }: OrganisationL
               Créez votre première organisation pour commencer à facturer.
             </p>
             {showActions && (
-              <Button onClick={handleCreate} className="flex items-center gap-2">
+              <RestrictedButton
+                allowed={canWriteTreasury}
+                deniedMessage={treasuryDeniedMessage}
+                onClick={handleCreate}
+                className="flex items-center gap-2"
+              >
                 <Plus className="w-4 h-4" />
                 Créer une organisation
-              </Button>
+              </RestrictedButton>
             )}
           </CardContent>
         </Card>
@@ -210,19 +226,23 @@ export function OrganisationList({ onSelect, showActions = true }: OrganisationL
                   </div>
                   {showActions && (
                     <div className="flex gap-1">
-                      <Button
+                      <RestrictedButton
                         size="sm"
                         variant="ghost"
+                        allowed={canWriteTreasury}
+                        deniedMessage={treasuryDeniedMessage}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEdit(organisation);
                         }}
                       >
                         <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
+                      </RestrictedButton>
+                      <RestrictedButton
                         size="sm"
                         variant="ghost"
+                        allowed={canWriteTreasury}
+                        deniedMessage={treasuryDeniedMessage}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(organisation.id);
@@ -230,7 +250,7 @@ export function OrganisationList({ onSelect, showActions = true }: OrganisationL
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </Button>
+                      </RestrictedButton>
                     </div>
                   )}
                 </div>
@@ -281,6 +301,11 @@ export function OrganisationList({ onSelect, showActions = true }: OrganisationL
           ))}
         </div>
       )}
+      <GuardedActionDialog
+        open={treasuryGuard.deniedOpen}
+        onOpenChange={treasuryGuard.setDeniedOpen}
+        message={treasuryGuard.deniedMessage}
+      />
     </div>
   );
 }

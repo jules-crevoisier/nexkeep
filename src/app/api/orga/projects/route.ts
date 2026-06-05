@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity";
+import { buildVisibleProjectsWhere } from "@/lib/orga-access";
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/projects?status=active - Liste des projets (avec compteur de tâches)
@@ -9,9 +10,7 @@ export async function GET(request: NextRequest) {
     const ctx = await requireWorkspace();
 
     const status = new URL(request.url).searchParams.get("status");
-    const where: { workspaceId: string; status?: string } = {
-      workspaceId: ctx.workspace.id,
-    };
+    const where = buildVisibleProjectsWhere(ctx);
     if (status) where.status = status;
 
     const projects = await prisma.project.findMany({

@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useGuardedAction } from '@/hooks/use-guarded-action';
+import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog';
+import { RestrictedButton } from '@/components/permissions/restricted-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -43,6 +47,8 @@ interface ClientListProps {
 }
 
 export function ClientList({ onSelect, showActions = true }: ClientListProps) {
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions();
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,17 +77,17 @@ export function ClientList({ onSelect, showActions = true }: ClientListProps) {
     fetchClients();
   }, []);
 
-  const handleCreate = () => {
+  const handleCreate = treasuryGuard.run(() => {
     setEditingClient(null);
     setShowForm(true);
-  };
+  });
 
-  const handleEdit = (client: Client) => {
+  const handleEdit = treasuryGuard.guard((client: Client) => {
     setEditingClient(client);
     setShowForm(true);
-  };
+  });
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = treasuryGuard.guard(async (id: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) {
       return;
     }
@@ -99,7 +105,7 @@ export function ClientList({ onSelect, showActions = true }: ClientListProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     }
-  };
+  });
 
   const handleSave = async (clientData: Client) => {
     try {
@@ -166,10 +172,15 @@ export function ClientList({ onSelect, showActions = true }: ClientListProps) {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Clients</h2>
         {showActions && (
-          <Button onClick={handleCreate} className="flex items-center gap-2">
+          <RestrictedButton
+            allowed={canWriteTreasury}
+            deniedMessage={treasuryDeniedMessage}
+            onClick={handleCreate}
+            className="flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             Nouveau client
-          </Button>
+          </RestrictedButton>
         )}
       </div>
 
@@ -182,10 +193,15 @@ export function ClientList({ onSelect, showActions = true }: ClientListProps) {
               Créez votre premier client pour commencer à facturer.
             </p>
             {showActions && (
-              <Button onClick={handleCreate} className="flex items-center gap-2">
+              <RestrictedButton
+                allowed={canWriteTreasury}
+                deniedMessage={treasuryDeniedMessage}
+                onClick={handleCreate}
+                className="flex items-center gap-2"
+              >
                 <Plus className="w-4 h-4" />
                 Créer un client
-              </Button>
+              </RestrictedButton>
             )}
           </CardContent>
         </Card>
@@ -223,19 +239,23 @@ export function ClientList({ onSelect, showActions = true }: ClientListProps) {
                   </div>
                   {showActions && (
                     <div className="flex gap-1">
-                      <Button
+                      <RestrictedButton
                         size="sm"
                         variant="ghost"
+                        allowed={canWriteTreasury}
+                        deniedMessage={treasuryDeniedMessage}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEdit(client);
                         }}
                       >
                         <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
+                      </RestrictedButton>
+                      <RestrictedButton
                         size="sm"
                         variant="ghost"
+                        allowed={canWriteTreasury}
+                        deniedMessage={treasuryDeniedMessage}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(client.id);
@@ -243,7 +263,7 @@ export function ClientList({ onSelect, showActions = true }: ClientListProps) {
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </Button>
+                      </RestrictedButton>
                     </div>
                   )}
                 </div>
@@ -289,6 +309,11 @@ export function ClientList({ onSelect, showActions = true }: ClientListProps) {
           ))}
         </div>
       )}
+      <GuardedActionDialog
+        open={treasuryGuard.deniedOpen}
+        onOpenChange={treasuryGuard.setDeniedOpen}
+        message={treasuryGuard.deniedMessage}
+      />
     </div>
   );
 }

@@ -25,6 +25,8 @@ export async function GET(
         color: m.color,
         role: m.role,
         treasuryAccess: m.treasuryAccess,
+        orgaScope: m.orgaScope,
+        canAccessInbox: m.canAccessInbox,
         hasAccount: !!m.userId,
       }))
     )

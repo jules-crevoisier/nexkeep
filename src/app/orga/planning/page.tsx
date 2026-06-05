@@ -25,6 +25,10 @@ import { fr } from "date-fns/locale";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { OrgaLayout } from "@/components/layout/orga-layout";
 import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useGuardedAction } from "@/hooks/use-guarded-action";
+import { GuardedActionDialog } from "@/components/permissions/guarded-action-dialog";
+import { RestrictedButton } from "@/components/permissions/restricted-button";
 import { cn } from "@/lib/utils";
 import { ProjectDialog } from "@/components/orga/project-dialog";
 import {
@@ -39,6 +43,8 @@ const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 export default function PlanningPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const { canEditOrga, orgaDeniedMessage } = usePermissions();
+  const orgaGuard = useGuardedAction(canEditOrga, orgaDeniedMessage);
   const [projects, setProjects] = useState<Project[]>([]);
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -85,17 +91,17 @@ export default function PlanningPage() {
     return counts;
   }, [projects]);
 
-  const openNewIdea = (endDate = "") => {
+  const openNewIdea = orgaGuard.guard((endDate = "") => {
     setEditing(null);
     setDefaultDate(endDate);
     setDialogOpen(true);
-  };
+  });
 
-  const openEdit = (project: Project) => {
+  const openEdit = orgaGuard.guard((project: Project) => {
     setEditing(project);
     setDefaultDate("");
     setDialogOpen(true);
-  };
+  });
 
   return (
     <AuthGuard>
@@ -108,10 +114,14 @@ export default function PlanningPage() {
                 Vos projets et idées placés dans le calendrier
               </p>
             </div>
-            <Button onClick={() => openNewIdea()}>
+            <RestrictedButton
+              allowed={canEditOrga}
+              deniedMessage={orgaDeniedMessage}
+              onClick={() => openNewIdea()}
+            >
               <Lightbulb className="mr-2 h-4 w-4" />
               Nouvelle idée
-            </Button>
+            </RestrictedButton>
           </div>
 
           {/* Légende des statuts */}
@@ -314,6 +324,12 @@ export default function PlanningPage() {
             defaultStatus="idea"
             defaultEndDate={defaultDate}
             onSaved={fetchProjects}
+          />
+
+          <GuardedActionDialog
+            open={orgaGuard.deniedOpen}
+            onOpenChange={orgaGuard.setDeniedOpen}
+            message={orgaGuard.deniedMessage}
           />
         </div>
       </OrgaLayout>

@@ -36,6 +36,8 @@ export async function GET() {
         name: m.workspace.name,
         role: m.role,
         treasuryAccess: m.treasuryAccess,
+        orgaScope: m.orgaScope,
+        canAccessInbox: m.canAccessInbox,
         memberCount: m.workspace._count.members,
       })),
       invitations: invitations.map((i) => ({

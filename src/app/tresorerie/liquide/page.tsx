@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { usePermissions } from '@/hooks/use-permissions'
+import { useGuardedAction } from '@/hooks/use-guarded-action'
+import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog'
+import { RestrictedButton } from '@/components/permissions/restricted-button'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { CashTransactionForm, CashTransferForm } from '@/components/forms/cash-transaction-form'
@@ -24,6 +27,8 @@ const formatAmount = (amount: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount)
 
 export default function LiquidePage() {
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions()
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage)
   const [transactions, setTransactions] = useState<CashTx[]>([])
   const [bankInitial, setBankInitial] = useState(0)
   const [cashInitial, setCashInitial] = useState(0)
@@ -72,6 +77,10 @@ export default function LiquidePage() {
     fetchData()
   }
 
+  const openDialogGuarded = treasuryGuard.guard((kind: 'income' | 'expense' | 'transfer') => {
+    setOpenDialog(kind)
+  })
+
   return (
     <AuthGuard>
       <DashboardLayout>
@@ -83,13 +92,34 @@ export default function LiquidePage() {
               <p className="text-muted-foreground">Gérez la caisse en espèces du BDE</p>
             </div>
             <div className="flex gap-2 flex-wrap">
+              <RestrictedButton
+                allowed={canWriteTreasury}
+                deniedMessage={treasuryDeniedMessage}
+                onClick={() => openDialogGuarded('income')}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Entrée espèces
+              </RestrictedButton>
+              <RestrictedButton
+                variant="outline"
+                allowed={canWriteTreasury}
+                deniedMessage={treasuryDeniedMessage}
+                onClick={() => openDialogGuarded('expense')}
+              >
+                <Minus className="h-4 w-4 mr-2" />
+                Sortie espèces
+              </RestrictedButton>
+              <RestrictedButton
+                variant="outline"
+                allowed={canWriteTreasury}
+                deniedMessage={treasuryDeniedMessage}
+                onClick={() => openDialogGuarded('transfer')}
+              >
+                <ArrowLeftRight className="h-4 w-4 mr-2" />
+                Transfert
+              </RestrictedButton>
+
               <Dialog open={openDialog === 'income'} onOpenChange={(o) => setOpenDialog(o ? 'income' : null)}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Entrée espèces
-                  </Button>
-                </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Entrée d&apos;espèces</DialogTitle>
@@ -99,12 +129,6 @@ export default function LiquidePage() {
               </Dialog>
 
               <Dialog open={openDialog === 'expense'} onOpenChange={(o) => setOpenDialog(o ? 'expense' : null)}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <Minus className="h-4 w-4 mr-2" />
-                    Sortie espèces
-                  </Button>
-                </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Sortie d&apos;espèces</DialogTitle>
@@ -114,12 +138,6 @@ export default function LiquidePage() {
               </Dialog>
 
               <Dialog open={openDialog === 'transfer'} onOpenChange={(o) => setOpenDialog(o ? 'transfer' : null)}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <ArrowLeftRight className="h-4 w-4 mr-2" />
-                    Transfert
-                  </Button>
-                </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Transfert Banque ↔ Caisse</DialogTitle>
@@ -222,6 +240,12 @@ export default function LiquidePage() {
             </CardContent>
           </Card>
         </div>
+
+        <GuardedActionDialog
+          open={treasuryGuard.deniedOpen}
+          onOpenChange={treasuryGuard.setDeniedOpen}
+          message={treasuryGuard.deniedMessage}
+        />
       </DashboardLayout>
     </AuthGuard>
   )

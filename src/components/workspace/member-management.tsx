@@ -2,7 +2,18 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Users, Trash2, Mail, ShieldCheck, Clock, X, Info } from "lucide-react";
+import {
+  Plus,
+  Users,
+  Trash2,
+  Mail,
+  ShieldCheck,
+  Clock,
+  X,
+  Info,
+  FolderKanban,
+} from "lucide-react";
+import { MemberProjectAccessDialog } from "./member-project-access-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,6 +47,7 @@ import { useWorkspace } from "@/components/providers/workspace-provider";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
 type Treasury = "NONE" | "READ" | "WRITE";
+type OrgaScope = "FULL" | "PROJECTS_ONLY";
 
 interface WsMember {
   id: string;
@@ -44,8 +56,15 @@ interface WsMember {
   color: string;
   role: Role;
   treasuryAccess: Treasury;
+  orgaScope: OrgaScope;
+  canAccessInbox: boolean;
   hasAccount: boolean;
 }
+
+const ORGA_SCOPE_LABELS: Record<OrgaScope, string> = {
+  FULL: "Tous projets publics",
+  PROJECTS_ONLY: "Projets assignés",
+};
 
 interface WsInvitation {
   id: string;
@@ -95,6 +114,7 @@ export function MemberManagement() {
   const [invitations, setInvitations] = useState<WsInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<WsMember | null>(null);
+  const [accessTarget, setAccessTarget] = useState<WsMember | null>(null);
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -217,7 +237,7 @@ export function MemberManagement() {
         <div>
           <h2 className="text-xl font-semibold">Membres &amp; rôles</h2>
           <p className="text-sm text-muted-foreground">
-            Gérez les membres, leurs rôles et l&apos;accès à la trésorerie
+            Gérez les membres, leurs rôles, accès projets et trésorerie
           </p>
         </div>
         {isAdmin && (
@@ -244,9 +264,10 @@ export function MemberManagement() {
             ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Liste de gauche</span> = rôle dans
-            l&apos;organisation. <span className="font-medium text-foreground">Liste de droite</span> ={" "}
-            accès à la trésorerie (indépendant du rôle) : Aucun accès, Lecture, ou Lecture + écriture.
+            <span className="font-medium text-foreground">Rôle</span> = droits d&apos;édition
+            globaux. <span className="font-medium text-foreground">Trésorerie</span> = accès
+            financier. <span className="font-medium text-foreground">Icône dossier</span> =
+            projets visibles et tâches courantes (sans projet).
           </p>
         </CardContent>
       </Card>
@@ -323,6 +344,10 @@ export function MemberManagement() {
                               {!member.hasAccount && " (sans compte)"}
                             </p>
                           )}
+                          <p className="text-[11px] text-muted-foreground">
+                            {ORGA_SCOPE_LABELS[member.orgaScope ?? "FULL"]}
+                            {!member.canAccessInbox && " · Pas de tâches courantes"}
+                          </p>
                         </div>
                       </div>
 
@@ -366,6 +391,14 @@ export function MemberManagement() {
                               ))}
                             </SelectContent>
                           </Select>
+
+                          <button
+                            onClick={() => setAccessTarget(member)}
+                            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            aria-label="Configurer les accès projets"
+                          >
+                            <FolderKanban className="h-4 w-4" />
+                          </button>
 
                           <button
                             onClick={() => setDeleteTarget(member)}
@@ -467,6 +500,17 @@ export function MemberManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {accessTarget && workspaceId && (
+        <MemberProjectAccessDialog
+          open={!!accessTarget}
+          onOpenChange={(o) => !o && setAccessTarget(null)}
+          workspaceId={workspaceId}
+          memberId={accessTarget.id}
+          memberName={accessTarget.name}
+          onSaved={fetchAll}
+        />
+      )}
 
       <AlertDialog
         open={!!deleteTarget}

@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useGuardedAction } from '@/hooks/use-guarded-action';
+import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog';
+import { RestrictedButton } from '@/components/permissions/restricted-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -55,6 +59,8 @@ interface InvoiceListProps {
 
 export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
   const router = useRouter();
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions();
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +109,7 @@ export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
     }
   };
 
-  const handleDeleteInvoice = async (invoiceId: string) => {
+  const handleDeleteInvoice = treasuryGuard.guard(async (invoiceId: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette facture ?')) {
       return;
     }
@@ -121,7 +127,7 @@ export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     }
-  };
+  });
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -156,10 +162,15 @@ export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Factures</h2>
-        <Button onClick={onCreateInvoice} className="flex items-center gap-2">
+        <RestrictedButton
+          allowed={canWriteTreasury}
+          deniedMessage={treasuryDeniedMessage}
+          onClick={() => treasuryGuard.run(onCreateInvoice)}
+          className="flex items-center gap-2"
+        >
           <Plus className="w-4 h-4" />
           Nouvelle facture
-        </Button>
+        </RestrictedButton>
       </div>
 
       {invoices.length === 0 ? (
@@ -170,10 +181,15 @@ export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
             <p className="text-muted-foreground text-center mb-4">
               Créez votre première facture pour commencer.
             </p>
-            <Button onClick={onCreateInvoice} className="flex items-center gap-2">
+            <RestrictedButton
+              allowed={canWriteTreasury}
+              deniedMessage={treasuryDeniedMessage}
+              onClick={() => treasuryGuard.run(onCreateInvoice)}
+              className="flex items-center gap-2"
+            >
               <Plus className="w-4 h-4" />
               Créer une facture
-            </Button>
+            </RestrictedButton>
           </CardContent>
         </Card>
       ) : (
@@ -253,30 +269,39 @@ export function InvoiceList({ onCreateInvoice }: InvoiceListProps) {
                     <Eye className="w-4 h-4" />
                     Voir
                   </Button>
-                  <Button
+                  <RestrictedButton
                     variant="outline"
                     size="sm"
+                    allowed={canWriteTreasury}
+                    deniedMessage={treasuryDeniedMessage}
                     onClick={() => router.push(`/tresorerie/facturation/${invoice.id}/edit`)}
                     className="flex items-center gap-2"
                   >
                     <Edit className="w-4 h-4" />
                     Modifier
-                  </Button>
-                  <Button
+                  </RestrictedButton>
+                  <RestrictedButton
                     variant="outline"
                     size="sm"
+                    allowed={canWriteTreasury}
+                    deniedMessage={treasuryDeniedMessage}
                     onClick={() => handleDeleteInvoice(invoice.id)}
                     className="text-destructive hover:text-destructive flex items-center gap-2"
                   >
                     <Trash2 className="w-4 h-4" />
                     Supprimer
-                  </Button>
+                  </RestrictedButton>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      <GuardedActionDialog
+        open={treasuryGuard.deniedOpen}
+        onOpenChange={treasuryGuard.setDeniedOpen}
+        message={treasuryGuard.deniedMessage}
+      />
     </div>
   );
 }

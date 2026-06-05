@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  assertProjectReadAccess,
+  assertProjectWriteAccess,
+} from "@/lib/orga-access";
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/projects/[id]
@@ -19,6 +23,7 @@ export async function GET(
       return NextResponse.json({ error: "Projet non trouvé" }, { status: 404 });
     }
 
+    await assertProjectReadAccess(ctx, id);
     return NextResponse.json(project);
   } catch (error) {
     const res = workspaceErrorResponse(error);
@@ -44,10 +49,21 @@ export async function PATCH(
       return NextResponse.json({ error: "Projet non trouvé" }, { status: 404 });
     }
 
+    await assertProjectWriteAccess(ctx, id, "MANAGER");
+
     const body = await request.json();
     const data: Record<string, unknown> = {};
     for (const key of ["name", "description", "color", "status", "position"]) {
       if (body[key] !== undefined) data[key] = body[key];
+    }
+    if (body.isRestricted !== undefined) {
+      if (ctx.role !== "ADMIN" && ctx.role !== "OWNER") {
+        return NextResponse.json(
+          { error: "Seuls les administrateurs peuvent restreindre un projet" },
+          { status: 403 }
+        );
+      }
+      data.isRestricted = Boolean(body.isRestricted);
     }
     if (body.budget !== undefined) {
       data.budget =
@@ -83,6 +99,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Projet non trouvé" }, { status: 404 });
     }
 
+    await assertProjectWriteAccess(ctx, id, "MANAGER");
     await prisma.project.delete({ where: { id } });
     return NextResponse.json({ message: "Projet supprimé" });
   } catch (error) {

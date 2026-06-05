@@ -6,7 +6,10 @@ import { useSession } from "next-auth/react";
 import { Plus, FolderKanban, Pencil, Trash2 } from "lucide-react";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { OrgaLayout } from "@/components/layout/orga-layout";
-import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useGuardedAction } from "@/hooks/use-guarded-action";
+import { GuardedActionDialog } from "@/components/permissions/guarded-action-dialog";
+import { RestrictedButton } from "@/components/permissions/restricted-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
@@ -25,6 +28,8 @@ import type { Project } from "@/components/orga/task-types";
 
 export default function ProjectsPage() {
   const { data: session } = useSession();
+  const { canEditOrga, orgaDeniedMessage } = usePermissions();
+  const orgaGuard = useGuardedAction(canEditOrga, orgaDeniedMessage);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -46,16 +51,21 @@ export default function ProjectsPage() {
     if (session) fetchProjects();
   }, [session, fetchProjects]);
 
-  const handleNew = () => {
+  const handleNew = orgaGuard.run(() => {
     setEditing(null);
     setDialogOpen(true);
-  };
+  });
 
-  const handleEdit = (e: React.MouseEvent, project: Project) => {
+  const handleEdit = orgaGuard.guard((e: React.MouseEvent, project: Project) => {
     e.preventDefault();
     setEditing(project);
     setDialogOpen(true);
-  };
+  });
+
+  const handleDeleteRequest = orgaGuard.guard((e: React.MouseEvent, project: Project) => {
+    e.preventDefault();
+    setDeleteTarget(project);
+  });
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -81,10 +91,14 @@ export default function ProjectsPage() {
                 Organisez vos tâches par projet
               </p>
             </div>
-            <Button onClick={handleNew}>
+            <RestrictedButton
+              allowed={canEditOrga}
+              deniedMessage={orgaDeniedMessage}
+              onClick={handleNew}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Nouveau projet
-            </Button>
+            </RestrictedButton>
           </div>
 
           {loading ? (
@@ -95,10 +109,16 @@ export default function ProjectsPage() {
             <div className="rounded-lg border border-dashed py-16 text-center">
               <FolderKanban className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
               <p className="text-muted-foreground">Aucun projet pour le moment</p>
-              <Button variant="outline" className="mt-4" onClick={handleNew}>
+              <RestrictedButton
+                variant="outline"
+                className="mt-4"
+                allowed={canEditOrga}
+                deniedMessage={orgaDeniedMessage}
+                onClick={handleNew}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Créer un projet
-              </Button>
+              </RestrictedButton>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -135,10 +155,7 @@ export default function ProjectsPage() {
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setDeleteTarget(project);
-                          }}
+                          onClick={(e) => handleDeleteRequest(e, project)}
                           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-red-600"
                           aria-label="Supprimer"
                         >
@@ -193,6 +210,12 @@ export default function ProjectsPage() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          <GuardedActionDialog
+            open={orgaGuard.deniedOpen}
+            onOpenChange={orgaGuard.setDeniedOpen}
+            message={orgaGuard.deniedMessage}
+          />
         </div>
       </OrgaLayout>
     </AuthGuard>

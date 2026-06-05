@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { WorkspaceRole, TreasuryAccess } from "@prisma/client"
+import type { WorkspaceRole, TreasuryAccess, OrgaScope } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireMembershipIn, requireRoleIn, workspaceErrorResponse, WorkspaceAuthError } from "@/lib/workspace"
 
 const ROLES: WorkspaceRole[] = ["OWNER", "ADMIN", "MEMBER", "VIEWER"]
 const TREASURY: TreasuryAccess[] = ["NONE", "READ", "WRITE"]
+const ORGA_SCOPES: OrgaScope[] = ["FULL", "PROJECTS_ONLY"]
 
 // PATCH /api/workspaces/[id]/members/[memberId] - modifier rôle / accès trésorerie / couleur (ADMIN+)
 export async function PATCH(
@@ -23,7 +24,13 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const data: { role?: WorkspaceRole; treasuryAccess?: TreasuryAccess; color?: string } = {}
+    const data: {
+      role?: WorkspaceRole
+      treasuryAccess?: TreasuryAccess
+      orgaScope?: OrgaScope
+      canAccessInbox?: boolean
+      color?: string
+    } = {}
 
     if (body.role !== undefined) {
       if (!ROLES.includes(body.role)) {
@@ -50,6 +57,17 @@ export async function PATCH(
       data.treasuryAccess = body.treasuryAccess
     }
 
+    if (body.orgaScope !== undefined) {
+      if (!ORGA_SCOPES.includes(body.orgaScope)) {
+        return NextResponse.json({ error: "Scope organisation invalide" }, { status: 400 })
+      }
+      data.orgaScope = body.orgaScope
+    }
+
+    if (body.canAccessInbox !== undefined) {
+      data.canAccessInbox = Boolean(body.canAccessInbox)
+    }
+
     if (body.color !== undefined && typeof body.color === "string") {
       data.color = body.color
     }
@@ -67,6 +85,8 @@ export async function PATCH(
       color: updated.color,
       role: updated.role,
       treasuryAccess: updated.treasuryAccess,
+      orgaScope: updated.orgaScope,
+      canAccessInbox: updated.canAccessInbox,
       hasAccount: !!updated.userId,
     })
   } catch (error) {

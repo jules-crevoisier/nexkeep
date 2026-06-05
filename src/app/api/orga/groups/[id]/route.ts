@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseAndValidateAmount } from "@/lib/api-utils";
+import { assertProjectReadAccess, assertProjectWriteAccess } from "@/lib/orga-access";
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 async function getOwnedGroup(id: string, workspaceId: string) {
   return prisma.taskGroup.findFirst({
     where: { id, project: { workspaceId } },
-    select: { id: true },
+    select: { id: true, projectId: true },
   });
 }
 
@@ -30,6 +31,7 @@ export async function GET(
       return NextResponse.json({ error: "Pôle non trouvé" }, { status: 404 });
     }
 
+    await assertProjectReadAccess(ctx, group.project.id);
     return NextResponse.json(group);
   } catch (error) {
     const res = workspaceErrorResponse(error);
@@ -52,6 +54,8 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Groupe non trouvé" }, { status: 404 });
     }
+
+    await assertProjectWriteAccess(ctx, existing.projectId);
 
     const body = await request.json();
     const data: Record<string, unknown> = {};
@@ -96,6 +100,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Groupe non trouvé" }, { status: 404 });
     }
 
+    await assertProjectWriteAccess(ctx, existing.projectId);
     await prisma.taskGroup.delete({ where: { id } });
     return NextResponse.json({ message: "Groupe supprimé" });
   } catch (error) {

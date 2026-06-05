@@ -26,9 +26,15 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { CategorySelector } from "@/components/forms/category-selector";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { dispatchDataUpdated } from "@/lib/events";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useGuardedAction } from "@/hooks/use-guarded-action";
+import { GuardedActionDialog } from "@/components/permissions/guarded-action-dialog";
+import { RestrictedButton } from "@/components/permissions/restricted-button";
 
 export default function TransactionsPage() {
   const { data: session } = useSession();
+  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions();
+  const treasuryGuard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage);
   const [userBudgetInitial, setUserBudgetInitial] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,6 +61,10 @@ export default function TransactionsPage() {
 
   const handleIncomeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canWriteTreasury) {
+      treasuryGuard.setDeniedOpen(true);
+      return;
+    }
     if (!incomeForm.name || !incomeForm.amount) return;
 
     setLoading(true);
@@ -86,6 +96,10 @@ export default function TransactionsPage() {
 
   const handleExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canWriteTreasury) {
+      treasuryGuard.setDeniedOpen(true);
+      return;
+    }
     if (!expenseForm.name || !expenseForm.amount) return;
 
     const expenseAmount = parseFloat(expenseForm.amount);
@@ -299,10 +313,16 @@ export default function TransactionsPage() {
                   </Button>
                 </div>
               </div>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <RestrictedButton
+                  type="submit"
+                  className="w-full"
+                  disabled={loading}
+                  allowed={canWriteTreasury}
+                  deniedMessage={treasuryDeniedMessage}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter
-                </Button>
+                </RestrictedButton>
               </form>
             </CardContent>
           </Card>
@@ -376,10 +396,17 @@ export default function TransactionsPage() {
                   </Button>
                 </div>
               </div>
-                <Button type="submit" variant="destructive" className="w-full" disabled={loading}>
+                <RestrictedButton
+                  type="submit"
+                  variant="destructive"
+                  className="w-full"
+                  disabled={loading}
+                  allowed={canWriteTreasury}
+                  deniedMessage={treasuryDeniedMessage}
+                >
                   <Minus className="mr-2 h-4 w-4" />
                   Dépenser
-                </Button>
+                </RestrictedButton>
               </form>
             </CardContent>
           </Card>
@@ -412,6 +439,12 @@ export default function TransactionsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <GuardedActionDialog
+          open={treasuryGuard.deniedOpen}
+          onOpenChange={treasuryGuard.setDeniedOpen}
+          message={treasuryGuard.deniedMessage}
+        />
       </div>
       </DashboardLayout>
     </AuthGuard>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/use-permissions";
 import { TaskCard } from "./task-card";
 import { type Task, type Status } from "./task-types";
 
@@ -26,6 +27,7 @@ export function TaskKanbanView({
   onToggleSubtask,
   onStatusChange,
 }: TaskKanbanViewProps) {
+  const { canEditOrga } = usePermissions();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
 
@@ -62,12 +64,12 @@ export function TaskKanbanView({
         return (
           <div
             key={status.id}
-            onDragOver={(e) => {
+            onDragOver={canEditOrga ? (e) => {
               e.preventDefault();
               setOverCol(status.id);
-            }}
-            onDragLeave={() => setOverCol((c) => (c === status.id ? null : c))}
-            onDrop={() => handleDrop(status.id)}
+            } : undefined}
+            onDragLeave={canEditOrga ? () => setOverCol((c) => (c === status.id ? null : c)) : undefined}
+            onDrop={canEditOrga ? () => handleDrop(status.id) : undefined}
             className={cn(
               "flex flex-col rounded-lg border-t-4 bg-muted/40 p-3 transition-colors",
               overCol === status.id && "bg-muted ring-2 ring-primary/40"
@@ -86,8 +88,8 @@ export function TaskKanbanView({
                   key={task.id}
                   task={task}
                   showProject={showProject}
-                  draggable
-                  onDragStart={handleDragStart}
+                  draggable={canEditOrga}
+                  onDragStart={canEditOrga ? handleDragStart : undefined}
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onToggleDone={onToggleDone}

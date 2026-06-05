@@ -30,6 +30,17 @@ enum InvitationStatus {
   EXPIRED
 }
 
+enum OrgaScope {
+  FULL
+  PROJECTS_ONLY
+}
+
+enum ProjectAccess {
+  VIEWER
+  CONTRIBUTOR
+  MANAGER
+}
+
 // Tenant de collaboration (UI = "Organisation")
 model Workspace {
   id            String   @id @default(cuid())
@@ -95,6 +106,8 @@ model WorkspaceMember {
   id             String         @id @default(cuid())
   role           WorkspaceRole  @default(MEMBER)
   treasuryAccess TreasuryAccess @default(NONE)
+  orgaScope      OrgaScope      @default(FULL)
+  canAccessInbox Boolean        @default(true)
   displayName    String?
   color          String         @default("#3b82f6")
   createdAt      DateTime       @default(now())
@@ -106,7 +119,8 @@ model WorkspaceMember {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  assignments TaskAssignee[]
+  assignments    TaskAssignee[]
+  projectMembers ProjectMember[]
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -118,6 +132,8 @@ model WorkspaceInvitation {
   email          String
   role           WorkspaceRole    @default(MEMBER)
   treasuryAccess TreasuryAccess   @default(NONE)
+  orgaScope      OrgaScope        @default(FULL)
+  canAccessInbox Boolean          @default(true)
   token          String           @unique
   status         InvitationStatus @default(PENDING)
   expiresAt      DateTime
@@ -373,16 +389,17 @@ model InvoiceItem {
 
 // Modeles pour le module Organisation / Taches
 model Project {
-  id          String    @id @default(cuid())
-  name        String    // Nom du projet
-  description String?   // Description
-  color       String?   // Couleur hexadecimale (pastille)
-  status      String    @default("active") // "active" ou "archived"
-  budget      Float?    // Budget total du projet (optionnel)
-  endDate     DateTime? // Date de fin / echeance du projet
-  position    Int       @default(0) // Ordre d'affichage
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  name         String    // Nom du projet
+  description  String?   // Description
+  color        String?   // Couleur hexadecimale (pastille)
+  status       String    @default("active") // "active" ou "archived"
+  budget       Float?    // Budget total du projet (optionnel)
+  endDate      DateTime? // Date de fin / echeance du projet
+  position     Int       @default(0) // Ordre d'affichage
+  isRestricted Boolean   @default(false) // true = acces limite aux ProjectMember
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   userId String?
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -390,11 +407,28 @@ model Project {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  tasks  Task[]
-  groups TaskGroup[]
+  tasks   Task[]
+  groups  TaskGroup[]
+  members ProjectMember[]
 
   @@index([workspaceId])
   @@map("projects")
+}
+
+model ProjectMember {
+  id        String        @id @default(cuid())
+  access    ProjectAccess @default(VIEWER)
+  createdAt DateTime      @default(now())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  memberId String
+  member   WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, memberId])
+  @@index([memberId])
+  @@map("project_members")
 }
 
 model TaskGroup {

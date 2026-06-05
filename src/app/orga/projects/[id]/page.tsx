@@ -4,7 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import { use } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, CheckCircle2, Circle, CalendarClock, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Circle,
+  CalendarClock,
+  Wallet,
+  Lock,
+  LockOpen,
+} from "lucide-react";
+import { usePermissions } from "@/hooks/use-permissions";
 import { format, isPast } from "date-fns";
 import { fr } from "date-fns/locale";
 import { AuthGuard } from "@/components/auth/auth-guard";
@@ -25,6 +34,7 @@ export default function ProjectBoardPage({
 }) {
   const { id } = use(params);
   const { data: session } = useSession();
+  const { canAdmin } = usePermissions();
   const [project, setProject] = useState<Project | null>(null);
   const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [notFound, setNotFound] = useState(false);
@@ -58,6 +68,22 @@ export default function ProjectBoardPage({
     window.addEventListener(ORGA_DATA_UPDATED_EVENT, handler);
     return () => window.removeEventListener(ORGA_DATA_UPDATED_EVENT, handler);
   }, [fetchProjectData]);
+
+  const toggleRestricted = async () => {
+    if (!project || !canAdmin) return;
+    const next = !project.isRestricted;
+    setProject({ ...project, isRestricted: next });
+    try {
+      await fetch(`/api/orga/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isRestricted: next }),
+      });
+    } catch (e) {
+      console.error("Error updating project restriction:", e);
+      setProject({ ...project, isRestricted: !next });
+    }
+  };
 
   const toggleStatus = async () => {
     if (!project) return;
@@ -98,22 +124,48 @@ export default function ProjectBoardPage({
                 {project?.name ?? (notFound ? "Projet introuvable" : "…")}
               </h1>
               {project && (
-                <button
-                  type="button"
-                  onClick={toggleStatus}
-                  title="Basculer terminé / en cours"
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80",
-                    projectStatusMeta(project.status).badge
+                <>
+                  <button
+                    type="button"
+                    onClick={toggleStatus}
+                    title="Basculer terminé / en cours"
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80",
+                      projectStatusMeta(project.status).badge
+                    )}
+                  >
+                    {project.status === "done" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <Circle className="h-3.5 w-3.5" />
+                    )}
+                    {projectStatusMeta(project.status).label}
+                  </button>
+                  {canAdmin && (
+                    <button
+                      type="button"
+                      onClick={toggleRestricted}
+                      title={
+                        project.isRestricted
+                          ? "Projet restreint — assignez des membres dans Paramètres"
+                          : "Projet public — visible par tous les membres"
+                      }
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80",
+                        project.isRestricted
+                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                          : "border-muted bg-muted/50 text-muted-foreground"
+                      )}
+                    >
+                      {project.isRestricted ? (
+                        <Lock className="h-3.5 w-3.5" />
+                      ) : (
+                        <LockOpen className="h-3.5 w-3.5" />
+                      )}
+                      {project.isRestricted ? "Restreint" : "Public"}
+                    </button>
                   )}
-                >
-                  {project.status === "done" ? (
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  ) : (
-                    <Circle className="h-3.5 w-3.5" />
-                  )}
-                  {projectStatusMeta(project.status).label}
-                </button>
+                </>
               )}
             </div>
             {project?.description && (

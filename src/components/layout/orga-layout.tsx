@@ -8,6 +8,7 @@ import { OrgaSidebar } from "./orga-sidebar";
 import { Breadcrumbs } from "./breadcrumbs";
 import { ModuleSwitcher } from "./module-switcher";
 import { OrgaCommandPalette } from "./orga-command-palette";
+import { ReaderModeBanner } from "@/components/permissions/reader-mode-banner";
 
 interface OrgaLayoutProps {
   children: React.ReactNode;
@@ -65,6 +66,7 @@ export function OrgaLayout({ children }: OrgaLayoutProps) {
           <main className="flex-1 overflow-auto">
             <div className="space-y-4 p-4 sm:p-6 lg:p-8">
               <Breadcrumbs />
+              <ReaderModeBanner mode="orga" />
               <div key={pathname} className="animate-in fade-in duration-300">
                 {children}
               </div>
