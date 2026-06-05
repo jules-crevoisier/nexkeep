@@ -1,36 +1,33 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireTreasury, workspaceErrorResponse } from "@/lib/workspace"
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const ctx = await requireTreasury("READ")
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { budget: true }
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: ctx.workspace.id },
+      select: { budget: true, budgetInitial: true, cashInitial: true }
     })
 
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    if (!workspace) {
+      return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
     }
 
-    return NextResponse.json({ budget: user.budget })
+    return NextResponse.json({
+      budget: workspace.budget,
+      budgetInitial: workspace.budgetInitial,
+      cashInitial: workspace.cashInitial
+    })
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    const ctx = await requireTreasury("WRITE")
 
     const { budgetInitial, cashInitial } = await request.json()
 
@@ -60,25 +57,23 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Aucune valeur à mettre à jour" }, { status: 400 })
     }
 
-    // Mettre à jour le(s) solde(s) initial(aux) de l'utilisateur
-    const updatedUser = await prisma.user.update({
-      where: { id: session.user.id },
+    // Mettre à jour le(s) solde(s) initial(aux) de l'organisation
+    const updatedWorkspace = await prisma.workspace.update({
+      where: { id: ctx.workspace.id },
       data,
       select: {
         id: true,
         budgetInitial: true,
         cashInitial: true,
-        budget: true,
-        email: true
+        budget: true
       }
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: "Budget initial mis à jour avec succès",
-      user: updatedUser 
+      user: updatedWorkspace
     })
   } catch (error) {
-    console.error("Erreur lors de la mise à jour du budget:", error)
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

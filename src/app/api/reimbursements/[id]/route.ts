@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireTreasury, workspaceErrorResponse } from '@/lib/workspace'
 
 // GET - Récupérer une demande de remboursement spécifique
 export async function GET(
@@ -10,16 +9,12 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
+    const ctx = await requireTreasury("READ")
 
     const request_data = await prisma.reimbursementRequest.findFirst({
       where: {
         id: id,
-        userId: session.user.id
+        workspaceId: ctx.workspace.id
       },
       include: {
         reimbursements: true
@@ -35,11 +30,7 @@ export async function GET(
 
     return NextResponse.json(request_data)
   } catch (error) {
-    console.error('Erreur lors de la récupération de la demande:', error)
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    )
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
@@ -50,20 +41,16 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
+    const ctx = await requireTreasury("WRITE")
 
     const body = await request.json()
     const { requesterName, requesterEmail, amount, description, status, receiptUrl, ribUrl, notes } = body
 
-    // Vérifier que la demande existe et appartient à l'utilisateur
+    // Vérifier que la demande existe et appartient à l'organisation
     const existingRequest = await prisma.reimbursementRequest.findFirst({
       where: {
         id: id,
-        userId: session.user.id
+        workspaceId: ctx.workspace.id
       }
     })
 
@@ -101,11 +88,7 @@ export async function PUT(
 
     return NextResponse.json(updatedRequest)
   } catch (error) {
-    console.error('Erreur lors de la mise à jour de la demande:', error)
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    )
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
@@ -116,17 +99,13 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
+    const ctx = await requireTreasury("WRITE")
 
-    // Vérifier que la demande existe et appartient à l'utilisateur
+    // Vérifier que la demande existe et appartient à l'organisation
     const existingRequest = await prisma.reimbursementRequest.findFirst({
       where: {
         id: id,
-        userId: session.user.id
+        workspaceId: ctx.workspace.id
       }
     })
 
@@ -143,10 +122,6 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Demande supprimée avec succès' })
   } catch (error) {
-    console.error('Erreur lors de la suppression de la demande:', error)
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    )
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultStatusId } from "@/lib/orga-statuses";
 import { taskInclude, setAssignees } from "@/lib/orga-task";
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/tasks?projectId=...&status=...&scope=inbox|all
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireWorkspace();
 
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get("projectId");
@@ -20,12 +16,12 @@ export async function GET(request: NextRequest) {
     const groupId = searchParams.get("groupId");
 
     const where: {
-      userId: string;
+      workspaceId: string;
       projectId?: string | null;
       statusId?: string;
       groupId?: string | null;
       parentId: null;
-    } = { userId: session.user.id, parentId: null }; // sous-tâches exclues du board
+    } = { workspaceId: ctx.workspace.id, parentId: null }; // sous-tâches exclues du board
 
     if (projectId) {
       where.projectId = projectId;
@@ -52,6 +48,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(tasks);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur GET tasks:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -60,10 +58,8 @@ export async function GET(request: NextRequest) {
 // POST /api/orga/tasks
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
+    const workspaceId = ctx.workspace.id;
 
     const body = await request.json();
     const {
@@ -86,17 +82,17 @@ export async function POST(request: NextRequest) {
     // Vérifier l'appartenance du projet
     if (projectId) {
       const project = await prisma.project.findFirst({
-        where: { id: projectId, userId: session.user.id },
+        where: { id: projectId, workspaceId },
       });
       if (!project) {
         return NextResponse.json({ error: "Projet invalide" }, { status: 400 });
       }
     }
 
-    // Vérifier l'appartenance du groupe (au projet de l'utilisateur)
+    // Vérifier l'appartenance du groupe (au projet de l'organisation)
     if (groupId) {
       const group = await prisma.taskGroup.findFirst({
-        where: { id: groupId, project: { userId: session.user.id } },
+        where: { id: groupId, project: { workspaceId } },
         select: { projectId: true },
       });
       if (!group || (projectId && group.projectId !== projectId)) {
@@ -107,23 +103,23 @@ export async function POST(request: NextRequest) {
     // Vérifier l'appartenance de la tâche parente (sous-tâche)
     if (parentId) {
       const parent = await prisma.task.findFirst({
-        where: { id: parentId, userId: session.user.id },
+        where: { id: parentId, workspaceId },
       });
       if (!parent) {
         return NextResponse.json({ error: "Tâche parente invalide" }, { status: 400 });
       }
     }
 
-    // Statut : fourni (vérifié) ou défaut de l'utilisateur
+    // Statut : fourni (vérifié) ou défaut de l'organisation
     let finalStatusId = statusId as string | undefined;
     if (finalStatusId) {
       const st = await prisma.status.findFirst({
-        where: { id: finalStatusId, userId: session.user.id },
+        where: { id: finalStatusId, workspaceId },
       });
       if (!st) finalStatusId = undefined;
     }
     if (!finalStatusId) {
-      finalStatusId = await getDefaultStatusId(session.user.id);
+      finalStatusId = await getDefaultStatusId(workspaceId, ctx.userId);
     }
     const status = await prisma.status.findUnique({ where: { id: finalStatusId } });
 
@@ -139,12 +135,13 @@ export async function POST(request: NextRequest) {
         parentId: parentId || null,
         statusId: finalStatusId,
         completedAt: status?.isDone ? new Date() : null,
-        userId: session.user.id,
+        workspaceId,
+        userId: ctx.userId,
       },
     });
 
     if (Array.isArray(assigneeIds) && assigneeIds.length > 0) {
-      await setAssignees(task.id, assigneeIds, session.user.id);
+      await setAssignees(task.id, assigneeIds, workspaceId);
     }
 
     const full = await prisma.task.findUnique({
@@ -153,6 +150,8 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json(full);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur POST task:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

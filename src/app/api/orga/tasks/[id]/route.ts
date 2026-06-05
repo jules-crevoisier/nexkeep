@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { taskInclude, setAssignees } from "@/lib/orga-task";
+import { requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // PATCH /api/orga/tasks/[id]
 export async function PATCH(
@@ -11,13 +10,11 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
+    const workspaceId = ctx.workspace.id;
 
     const existing = await prisma.task.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId },
     });
     if (!existing) {
       return NextResponse.json({ error: "Tâche non trouvée" }, { status: 404 });
@@ -39,7 +36,7 @@ export async function PATCH(
     if (body.statusId !== undefined) {
       if (body.statusId) {
         const status = await prisma.status.findFirst({
-          where: { id: body.statusId, userId: session.user.id },
+          where: { id: body.statusId, workspaceId },
         });
         if (!status) {
           return NextResponse.json({ error: "Statut invalide" }, { status: 400 });
@@ -56,7 +53,7 @@ export async function PATCH(
     if (body.projectId !== undefined) {
       if (body.projectId) {
         const project = await prisma.project.findFirst({
-          where: { id: body.projectId, userId: session.user.id },
+          where: { id: body.projectId, workspaceId },
         });
         if (!project) {
           return NextResponse.json({ error: "Projet invalide" }, { status: 400 });
@@ -71,7 +68,7 @@ export async function PATCH(
     if (body.groupId !== undefined) {
       if (body.groupId) {
         const group = await prisma.taskGroup.findFirst({
-          where: { id: body.groupId, project: { userId: session.user.id } },
+          where: { id: body.groupId, project: { workspaceId } },
           select: { id: true },
         });
         if (!group) {
@@ -85,7 +82,7 @@ export async function PATCH(
 
     // Resync des membres assignés
     if (Array.isArray(body.assigneeIds)) {
-      await setAssignees(id, body.assigneeIds, session.user.id);
+      await setAssignees(id, body.assigneeIds, workspaceId);
     }
 
     const task = await prisma.task.update({
@@ -96,6 +93,8 @@ export async function PATCH(
 
     return NextResponse.json(task);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur PATCH task:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -108,13 +107,10 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const existing = await prisma.task.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspace.id },
     });
     if (!existing) {
       return NextResponse.json({ error: "Tâche non trouvée" }, { status: 404 });
@@ -123,6 +119,8 @@ export async function DELETE(
     await prisma.task.delete({ where: { id } });
     return NextResponse.json({ message: "Tâche supprimée" });
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur DELETE task:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

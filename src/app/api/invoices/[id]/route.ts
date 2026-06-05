@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireTreasury, workspaceErrorResponse } from '@/lib/workspace';
 
 // GET /api/invoices/[id] - Récupérer une facture spécifique
 export async function GET(
@@ -10,15 +9,12 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury('READ');
 
     const invoice = await prisma.invoice.findFirst({
-      where: { 
+      where: {
         id: id,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       },
       include: {
         organisation: true,
@@ -37,8 +33,7 @@ export async function GET(
 
     return NextResponse.json(invoice);
   } catch (error) {
-    console.error('Erreur lors de la récupération de la facture:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
@@ -49,18 +44,15 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury('WRITE');
 
     const data = await request.json();
 
-    // Vérifier que la facture appartient à l'utilisateur
+    // Vérifier que la facture appartient à l'organisation active
     const existingInvoice = await prisma.invoice.findFirst({
-      where: { 
+      where: {
         id: id,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       }
     });
 
@@ -120,8 +112,7 @@ export async function PUT(
 
     return NextResponse.json(invoice);
   } catch (error) {
-    console.error('Erreur lors de la mise à jour de la facture:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
@@ -132,16 +123,13 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury('WRITE');
 
-    // Vérifier que la facture appartient à l'utilisateur
+    // Vérifier que la facture appartient à l'organisation active
     const existingInvoice = await prisma.invoice.findFirst({
-      where: { 
+      where: {
         id: id,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       }
     });
 
@@ -155,8 +143,7 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Facture supprimée avec succès' });
   } catch (error) {
-    console.error('Erreur lors de la suppression de la facture:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 

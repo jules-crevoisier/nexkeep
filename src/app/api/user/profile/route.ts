@@ -1,37 +1,33 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireWorkspace, workspaceErrorResponse } from "@/lib/workspace"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    const ctx = await requireWorkspace()
 
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        email: true,
-        budget: true,
-        budgetInitial: true,
-        cashInitial: true,
-        createdAt: true
-      }
+      where: { id: ctx.userId },
+      select: { id: true, email: true, createdAt: true }
     })
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
     }
 
-    return NextResponse.json(user)
+    // La trésorerie vit désormais sur l'organisation active.
+    return NextResponse.json({
+      ...user,
+      budget: ctx.workspace.budget,
+      budgetInitial: ctx.workspace.budgetInitial,
+      cashInitial: ctx.workspace.cashInitial,
+    })
   } catch (error) {
+    const res = workspaceErrorResponse(error)
+    if (res) return res
     console.error("Profile fetch error:", error)
-    return NextResponse.json({ 
-      error: "Erreur interne du serveur" 
+    return NextResponse.json({
+      error: "Erreur interne du serveur"
     }, { status: 500 })
   }
 }

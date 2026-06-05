@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // PATCH /api/orga/statuses/[id] - renommer / couleur / position / isBlocked
 export async function PATCH(
@@ -10,13 +9,10 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const existing = await prisma.status.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspace.id },
     });
     if (!existing) {
       return NextResponse.json({ error: "Statut non trouvé" }, { status: 404 });
@@ -32,6 +28,8 @@ export async function PATCH(
     const status = await prisma.status.update({ where: { id }, data });
     return NextResponse.json(status);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur PATCH status:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -44,13 +42,10 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const existing = await prisma.status.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspace.id },
     });
     if (!existing) {
       return NextResponse.json({ error: "Statut non trouvé" }, { status: 404 });
@@ -74,6 +69,8 @@ export async function DELETE(
     await prisma.status.delete({ where: { id } });
     return NextResponse.json({ message: "Statut supprimé" });
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur DELETE status:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

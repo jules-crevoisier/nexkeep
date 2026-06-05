@@ -46,28 +46,78 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Trouver l'utilisateur par son token de partage
-    const user = await prisma.user.findUnique({
-      where: { shareToken: token }
+    // Trouver l'organisation par son token de partage
+    const workspace = await prisma.workspace.findUnique({
+      where: { shareToken: token },
+      include: {
+        members: {
+          where: { role: 'OWNER', userId: { not: null } },
+          include: { user: { select: { id: true, email: true } } },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+      },
     })
 
-    if (!user) {
+    if (!workspace) {
       return NextResponse.json(
         { error: 'Token de partage invalide ou expiré' },
         { status: 404 }
       )
     }
 
+    const owner = workspace.members[0]?.user
+    const ownerUserId = owner?.id ?? workspace.createdById
+    if (!ownerUserId) {
+      return NextResponse.json(
+        { error: 'Organisation invalide (aucun propriétaire)' },
+        { status: 400 }
+      )
+    }
+
+    // Anti-spam : limite le nombre de demandes publiques (endpoint non authentifié
+    // qui déclenche l'envoi d'emails vers une adresse fournie par l'appelant).
+    const normalizedEmail = requesterEmail.trim().toLowerCase()
+    const now = Date.now()
+    const tenMinutesAgo = new Date(now - 10 * 60 * 1000)
+    const oneHourAgo = new Date(now - 60 * 60 * 1000)
+
+    const [recentForWorkspace, recentForEmail] = await Promise.all([
+      prisma.reimbursementRequest.count({
+        where: {
+          workspaceId: workspace.id,
+          isPublicRequest: true,
+          createdAt: { gt: tenMinutesAgo },
+        },
+      }),
+      prisma.reimbursementRequest.count({
+        where: {
+          workspaceId: workspace.id,
+          isPublicRequest: true,
+          requesterEmail: normalizedEmail,
+          createdAt: { gt: oneHourAgo },
+        },
+      }),
+    ])
+
+    if (recentForWorkspace >= 5 || recentForEmail >= 3) {
+      return NextResponse.json(
+        { error: 'Trop de demandes envoyées. Merci de réessayer plus tard.' },
+        { status: 429 }
+      )
+    }
+
     const reimbursementRequest = await prisma.reimbursementRequest.create({
       data: {
         requesterName: requesterName.trim(),
-        requesterEmail: requesterEmail.trim(),
+        requesterEmail: normalizedEmail,
         amount: parsedAmount,
         description: description.trim(),
         receiptUrl: receiptUrl || null,
         ribUrl: ribUrl || null,
         notes: notes?.trim() || null,
-        userId: user.id, // Lié à l'utilisateur qui a partagé le formulaire
+        userId: ownerUserId, // Créateur/propriétaire de l'organisation
+        workspaceId: workspace.id,
         isPublicRequest: true, // Marquer comme demande publique
         status: 'pending'
       }
@@ -77,7 +127,9 @@ export async function POST(request: NextRequest) {
     try {
       await Promise.all([
         sendReimbursementConfirmation(requesterEmail, requesterName, reimbursementRequest.id),
-        sendAdminNotification(requesterName, requesterEmail, parsedAmount, description, reimbursementRequest.id, user.email)
+        ...(owner?.email
+          ? [sendAdminNotification(requesterName, requesterEmail, parsedAmount, description, reimbursementRequest.id, owner.email)]
+          : [])
       ])
     } catch (emailError) {
       console.error('Erreur lors de l\'envoi des emails:', emailError)

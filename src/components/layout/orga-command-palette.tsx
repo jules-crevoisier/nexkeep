@@ -76,8 +76,8 @@ const NAV_ITEMS: CommandItem[] = [
     label: "Membres",
     group: "Navigation",
     icon: Users,
-    href: "/orga/membres",
-    keywords: "equipe assignation",
+    href: "/parametres",
+    keywords: "equipe assignation roles",
   },
 ];
 
@@ -158,7 +158,7 @@ export function OrgaCommandPalette({
       sublabel: m.email ?? undefined,
       group: "Membres",
       icon: Users,
-      href: "/orga/membres",
+      href: "/parametres",
     }));
     return [...NAV_ITEMS, ...projectItems, ...taskItems, ...memberItems];
   }, [projects, tasks, members]);

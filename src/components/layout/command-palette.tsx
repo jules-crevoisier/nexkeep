@@ -33,7 +33,7 @@ const ROUTES: CommandRoute[] = [
   { name: "Facturation", href: "/tresorerie/facturation", icon: FileText, keywords: "factures clients articles" },
   { name: "Historique", href: "/tresorerie/history", icon: History, keywords: "transactions export" },
   { name: "Rapports", href: "/tresorerie/reports", icon: BarChart3, keywords: "graphiques statistiques analyse" },
-  { name: "Paramètres", href: "/tresorerie/settings", icon: Settings, keywords: "profil theme securite" },
+  { name: "Paramètres", href: "/parametres", icon: Settings, keywords: "profil theme securite" },
 ];
 
 interface CommandPaletteProps {

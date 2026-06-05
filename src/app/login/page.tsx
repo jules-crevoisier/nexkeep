@@ -17,6 +17,7 @@ function LoginForm() {
   const [successMessage, setSuccessMessage] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
+  const invite = searchParams.get("invite");
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -53,6 +54,14 @@ function LoginForm() {
           setError("Erreur de connexion. Veuillez réessayer.");
         }
       } else if (result?.ok) {
+        // Si on vient d'un lien d'invitation, on l'accepte avant de continuer.
+        if (invite) {
+          try {
+            await fetch(`/api/invitations/${invite}/accept`, { method: "POST" });
+          } catch {
+            // sans blocage : l'invitation reste acceptable depuis le hub
+          }
+        }
         router.push("/");
         router.refresh();
       } else {
@@ -121,7 +130,10 @@ function LoginForm() {
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
                 Pas encore de compte ?{" "}
-                <Link href="/register" className="text-primary hover:underline">
+                <Link
+                  href={invite ? `/register?invite=${invite}` : "/register"}
+                  className="text-primary hover:underline"
+                >
                   Créer un compte
                 </Link>
               </p>

@@ -16,8 +16,10 @@ export default withAuth(
           "/login",
           "/register",
           "/request-reimbursement",
+          "/invitations",      // Page d'atterrissage d'invitation (visible avant connexion)
           "/api/auth",
           "/api/public",
+          "/api/invitations",  // Infos publiques d'invitation (l'accept se protège lui-même)
           "/api/upload"  // Nécessaire pour les formulaires externes
         ];
         
@@ -28,6 +30,11 @@ export default withAuth(
         
         // Si c'est une route publique, autoriser l'accès
         if (isPublicRoute) {
+          return true;
+        }
+
+        // Diagnostic email (dev uniquement, les handlers renvoient 404 en prod)
+        if (process.env.NODE_ENV !== "production" && pathname.startsWith("/api/dev")) {
           return true;
         }
         

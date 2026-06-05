@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireTreasury, workspaceErrorResponse } from '@/lib/workspace';
 
-// GET /api/invoices - Récupérer toutes les factures de l'utilisateur
+// GET /api/invoices - Récupérer toutes les factures de l'organisation
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury('READ');
 
     const invoices = await prisma.invoice.findMany({
-      where: { userId: session.user.id },
+      where: { workspaceId: ctx.workspace.id },
       include: {
         organisation: true,
         client: true,
@@ -23,33 +19,29 @@ export async function GET() {
 
     return NextResponse.json(invoices);
   } catch (error) {
-    console.error('Erreur lors de la récupération des factures:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
 // POST /api/invoices - Créer une nouvelle facture
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury('WRITE');
 
     const data = await request.json();
-    
+
     // Validation des champs obligatoires
     if (!data.organisationId || !data.clientId || !data.items || data.items.length === 0) {
-      return NextResponse.json({ 
-        error: 'L\'organisation, le client et au moins un article sont obligatoires' 
+      return NextResponse.json({
+        error: 'L\'organisation, le client et au moins un article sont obligatoires'
       }, { status: 400 });
     }
 
-    // Vérifier que l'organisation appartient à l'utilisateur
+    // Vérifier que l'organisation appartient à l'organisation active
     const organisation = await prisma.organisation.findFirst({
-      where: { 
+      where: {
         id: data.organisationId,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       }
     });
 
@@ -57,11 +49,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Organisation non trouvée' }, { status: 404 });
     }
 
-    // Vérifier que le client appartient à l'utilisateur
+    // Vérifier que le client appartient à l'organisation active
     const client = await prisma.client.findFirst({
-      where: { 
+      where: {
         id: data.clientId,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       }
     });
 
@@ -71,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     // Générer le numéro de facture
     const lastInvoice = await prisma.invoice.findFirst({
-      where: { userId: session.user.id },
+      where: { workspaceId: ctx.workspace.id },
       orderBy: { createdAt: 'desc' }
     });
 
@@ -105,7 +97,8 @@ export async function POST(request: NextRequest) {
         total,
         notes: data.notes,
         paymentTerms: data.paymentTerms,
-        userId: session.user.id,
+        workspaceId: ctx.workspace.id,
+        userId: ctx.userId,
         organisationId: data.organisationId,
         clientId: data.clientId,
         items: {
@@ -130,8 +123,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {
-    console.error('Erreur lors de la création de la facture:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 

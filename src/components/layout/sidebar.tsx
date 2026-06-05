@@ -68,7 +68,7 @@ const navigation = [
   },
   {
     name: "Paramètres",
-    href: "/tresorerie/settings",
+    href: "/parametres",
     icon: Settings,
   },
 ];

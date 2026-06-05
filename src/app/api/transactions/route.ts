@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireTreasury, workspaceErrorResponse } from "@/lib/workspace"
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const ctx = await requireTreasury("READ")
 
     const { searchParams } = new URL(request.url)
     const type = searchParams.get("type")
@@ -16,14 +12,14 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("endDate")
 
     const where: {
-      userId: string;
+      workspaceId: string;
       type?: string;
       date?: {
         gte: Date;
         lte: Date;
       };
     } = {
-      userId: session.user.id
+      workspaceId: ctx.workspace.id
     }
 
     if (type && type !== "all") {
@@ -44,16 +40,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(transactions)
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const ctx = await requireTreasury("WRITE")
 
     const { name, amount, type, description, category, account } = await request.json()
 
@@ -62,6 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const accountValue = account === "cash" ? "cash" : "bank"
+    const parsedAmount = parseFloat(amount)
 
     // Récupérer le nom de la catégorie si un ID est fourni
     let categoryName = category;
@@ -78,39 +72,32 @@ export async function POST(request: NextRequest) {
     const transaction = await prisma.transaction.create({
       data: {
         name,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         type,
         account: accountValue,
         description,
         category: categoryName,
-        userId: session.user.id
+        workspaceId: ctx.workspace.id,
+        userId: ctx.userId
       }
     })
 
-    // Mettre à jour le budget de l'utilisateur
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id }
+    // Mettre à jour le budget de l'organisation (atomique)
+    const updated = await prisma.workspace.update({
+      where: { id: ctx.workspace.id },
+      data: {
+        budget: type === "income"
+          ? { increment: parsedAmount }
+          : { decrement: parsedAmount }
+      },
+      select: { budget: true }
     })
 
-    if (user) {
-      const newBudget = type === "income" 
-        ? user.budget + parseFloat(amount)
-        : user.budget - parseFloat(amount)
-
-      await prisma.user.update({
-        where: { id: session.user.id },
-        data: { budget: newBudget }
-      })
-
-      // Retourner la transaction avec le nouveau budget
-      return NextResponse.json({
-        ...transaction,
-        newBudget
-      })
-    }
-
-    return NextResponse.json(transaction)
+    return NextResponse.json({
+      ...transaction,
+      newBudget: updated.budget
+    })
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseAndValidateAmount } from "@/lib/api-utils";
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/groups?projectId=... - Liste des groupes d'un projet
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireWorkspace();
 
     const projectId = new URL(request.url).searchParams.get("projectId");
     if (!projectId) {
@@ -18,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, userId: session.user.id },
+      where: { id: projectId, workspaceId: ctx.workspace.id },
       select: { id: true },
     });
     if (!project) {
@@ -33,6 +29,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(groups);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur GET groups:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -41,10 +39,7 @@ export async function GET(request: NextRequest) {
 // POST /api/orga/groups - Créer un groupe dans un projet
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const { projectId, name, color, budget } = await request.json();
     if (!projectId || typeof projectId !== "string") {
@@ -55,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, userId: session.user.id },
+      where: { id: projectId, workspaceId: ctx.workspace.id },
       select: { id: true },
     });
     if (!project) {
@@ -89,6 +84,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(group);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur POST group:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

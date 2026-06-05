@@ -14,32 +14,23 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Trouver l'utilisateur par son token de partage
-    const user = await prisma.user.findUnique({
+    // Trouver l'organisation par son token de partage
+    const workspace = await prisma.workspace.findUnique({
       where: { shareToken: token },
-      select: {
-        id: true,
-        email: true,
-        budget: true
-      }
+      select: { id: true, name: true }
     })
 
-    if (!user) {
+    if (!workspace) {
       return NextResponse.json(
         { error: 'Token invalide ou expiré' },
         { status: 404 }
       )
     }
 
-    const userName = user.email.split('@')[0]
-
-    // Retourner les informations de l'utilisateur (sans données sensibles)
+    // Retourner les informations publiques (sans données sensibles)
     return NextResponse.json({
-      userName,
-      user: {
-        name: userName,
-        email: user.email
-      },
+      userName: workspace.name,
+      user: { name: workspace.name },
       valid: true
     })
   } catch (error) {

@@ -34,7 +34,7 @@ NEXTAUTH_URL=https://votre-app.vercel.app
 NEXTAUTH_SECRET=un-secret-de-32-caracteres-minimum
 BLOB_READ_WRITE_TOKEN=vercel_blob_rw_XXXXXXXXXX
 RESEND_API_KEY=votre-cle-resend
-RESEND_FROM=NexKeep <noreply@yourdomain.com>
+RESEND_FROM="NexKeep <noreply@nexkeep.fr>"
 ADMIN_EMAIL=admin@yourdomain.com
 ```
 

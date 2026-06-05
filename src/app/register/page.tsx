@@ -6,26 +6,39 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Wallet } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     confirmPassword: "",
-    initialBudget: ""
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invite = searchParams.get("invite");
+
+  // Sur lien d'invitation : pré-remplir l'email attendu (verrouillé).
+  useEffect(() => {
+    if (!invite) return;
+    fetch(`/api/invitations/${invite}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.valid && data.email) {
+          setFormData((f) => ({ ...f, email: data.email }));
+        }
+      })
+      .catch(() => {});
+  }, [invite]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    // Validation côté client
     if (!formData.email || !formData.password || !formData.confirmPassword) {
       setError("Veuillez remplir tous les champs obligatoires");
       setLoading(false);
@@ -44,8 +57,7 @@ export default function RegisterPage() {
       return;
     }
 
-    // Validation de l'email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       setError("Format d'email invalide");
       setLoading(false);
@@ -59,14 +71,17 @@ export default function RegisterPage() {
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
-          initialBudget: formData.initialBudget || 0
-        })
+          inviteToken: invite || undefined,
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        router.push("/login?message=Compte créé avec succès");
+        const loginUrl = invite
+          ? `/login?invite=${invite}&message=Compte créé avec succès`
+          : "/login?message=Compte créé avec succès";
+        router.push(loginUrl);
       } else {
         setError(data.error || "Une erreur est survenue");
       }
@@ -85,12 +100,14 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold">NexKeep</h1>
           <p className="text-muted-foreground">Créez votre compte</p>
         </div>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Créer un compte</CardTitle>
             <CardDescription>
-              Inscrivez-vous pour commencer à gérer votre budget
+              {invite
+                ? "Inscrivez-vous pour rejoindre l'organisation qui vous a invité(e)"
+                : "Inscrivez-vous pour commencer à gérer votre organisation"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -102,50 +119,39 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
+                <Input
+                  id="email"
+                  type="email"
                   placeholder="votre@email.com"
                   value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  readOnly={!!invite}
                   required
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
-                <Input 
-                  id="password" 
-                  type="password" 
+                <Input
+                  id="password"
+                  type="password"
                   placeholder="••••••••"
                   value={formData.password}
-                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmer le mot de passe</Label>
-                <Input 
-                  id="confirm-password" 
-                  type="password" 
+                <Input
+                  id="confirm-password"
+                  type="password"
                   placeholder="••••••••"
                   value={formData.confirmPassword}
-                  onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, confirmPassword: e.target.value })
+                  }
                   required
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="initial-budget">Budget initial (optionnel)</Label>
-                <Input 
-                  id="initial-budget" 
-                  type="number" 
-                  placeholder="0.00"
-                  step="0.01"
-                  value={formData.initialBudget}
-                  onChange={(e) => setFormData({...formData, initialBudget: e.target.value})}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Vous pourrez le modifier plus tard
-                </p>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Création..." : "Créer le compte"}
@@ -154,7 +160,10 @@ export default function RegisterPage() {
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
                 Déjà un compte ?{" "}
-                <Link href="/login" className="text-primary hover:underline">
+                <Link
+                  href={invite ? `/login?invite=${invite}` : "/login"}
+                  className="text-primary hover:underline"
+                >
                   Se connecter
                 </Link>
               </p>
@@ -163,5 +172,13 @@ export default function RegisterPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div>Chargement...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

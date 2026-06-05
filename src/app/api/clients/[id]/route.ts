@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireTreasury, workspaceErrorResponse } from '@/lib/workspace';
 
 // GET /api/clients/[id] - Récupérer un client spécifique
 export async function GET(
@@ -10,15 +9,12 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury("READ");
 
     const client = await prisma.client.findFirst({
-      where: { 
+      where: {
         id: id,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       }
     });
 
@@ -28,8 +24,7 @@ export async function GET(
 
     return NextResponse.json(client);
   } catch (error) {
-    console.error('Erreur lors de la récupération du client:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -40,18 +35,15 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury("WRITE");
 
     const data = await request.json();
 
-    // Vérifier que le client appartient à l'utilisateur
+    // Vérifier que le client appartient à l'organisation
     const existingClient = await prisma.client.findFirst({
-      where: { 
+      where: {
         id: id,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       }
     });
 
@@ -66,8 +58,7 @@ export async function PUT(
 
     return NextResponse.json(client);
   } catch (error) {
-    console.error('Erreur lors de la mise à jour du client:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -78,16 +69,13 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
+    const ctx = await requireTreasury("WRITE");
 
-    // Vérifier que le client appartient à l'utilisateur
+    // Vérifier que le client appartient à l'organisation
     const existingClient = await prisma.client.findFirst({
-      where: { 
+      where: {
         id: id,
-        userId: session.user.id 
+        workspaceId: ctx.workspace.id
       }
     });
 
@@ -101,8 +89,6 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Client supprimé avec succès' });
   } catch (error) {
-    console.error('Erreur lors de la suppression du client:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
-

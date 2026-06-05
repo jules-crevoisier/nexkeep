@@ -12,15 +12,15 @@ export const taskInclude = {
 
 /**
  * Remplace la liste des membres assignés à une tâche.
- * Valide que chaque membre appartient bien à l'utilisateur.
+ * Valide que chaque membre appartient bien à l'organisation.
  */
 export async function setAssignees(
   taskId: string,
   memberIds: string[],
-  userId: string
+  workspaceId: string
 ) {
-  const valid = await prisma.member.findMany({
-    where: { id: { in: memberIds }, userId },
+  const valid = await prisma.workspaceMember.findMany({
+    where: { id: { in: memberIds }, workspaceId },
     select: { id: true },
   });
   await prisma.taskAssignee.deleteMany({ where: { taskId } });

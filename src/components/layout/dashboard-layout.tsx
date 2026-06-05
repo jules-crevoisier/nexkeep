@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sidebar } from "./sidebar";
 import { Breadcrumbs } from "./breadcrumbs";
 import { CommandPalette } from "./command-palette";
 import { ModuleSwitcher } from "./module-switcher";
+import { useWorkspace } from "@/components/providers/workspace-provider";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -30,6 +31,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const { loading, active } = useWorkspace();
+
+  // Garde trésorerie : un membre sans accès est redirigé vers l'orga.
+  useEffect(() => {
+    if (!loading && active && active.treasuryAccess === "NONE") {
+      router.replace("/orga");
+    }
+  }, [loading, active, router]);
 
   const segments = pathname.split("/").filter(Boolean);
   // Titre = segment connu le plus profond (ex: /tresorerie/transactions -> Transactions)

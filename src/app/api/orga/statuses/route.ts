@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ensureStatuses } from "@/lib/orga-statuses";
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
-// GET /api/orga/statuses - workflow de l'utilisateur (seed si vide)
+// GET /api/orga/statuses - workflow de l'organisation (seed si vide)
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
-    const statuses = await ensureStatuses(session.user.id);
+    const ctx = await requireWorkspace();
+    const statuses = await ensureStatuses(ctx.workspace.id, ctx.userId);
     return NextResponse.json(statuses);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur GET statuses:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -22,10 +20,7 @@ export async function GET() {
 // POST /api/orga/statuses - créer un statut
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const { name, color, isBlocked } = await request.json();
     if (!name || typeof name !== "string") {
@@ -33,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     const last = await prisma.status.findFirst({
-      where: { userId: session.user.id },
+      where: { workspaceId: ctx.workspace.id },
       orderBy: { position: "desc" },
       select: { position: true },
     });
@@ -44,12 +39,15 @@ export async function POST(request: NextRequest) {
         color: color || "#64748b",
         isBlocked: !!isBlocked,
         position: (last?.position ?? -1) + 1,
-        userId: session.user.id,
+        workspaceId: ctx.workspace.id,
+        userId: ctx.userId,
       },
     });
 
     return NextResponse.json(status);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur POST status:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

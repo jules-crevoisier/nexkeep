@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wallet, CheckSquare, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/components/providers/workspace-provider";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 interface GroupTool {
   name: string;
@@ -22,6 +24,13 @@ const GROUP_TOOLS: GroupTool[] = [
 export function ModuleSwitcher() {
   const pathname = usePathname();
   const current = pathname.split("/").filter(Boolean)[0] ?? "";
+  const { active: activeWs } = useWorkspace();
+
+  // La trésorerie est masquée pour les membres sans accès (treasuryAccess = NONE).
+  const canSeeTreasury = !activeWs || activeWs.treasuryAccess !== "NONE";
+  const tools = GROUP_TOOLS.filter(
+    (t) => t.segment !== "tresorerie" || canSeeTreasury
+  );
 
   return (
     <div className="flex h-10 w-full items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-3 text-zinc-200">
@@ -30,7 +39,7 @@ export function ModuleSwitcher() {
       </span>
       <div className="h-4 w-px bg-zinc-700" />
       <nav className="flex items-center gap-1 pl-2">
-        {GROUP_TOOLS.map((tool) => {
+        {tools.map((tool) => {
           const active = current === tool.segment;
           return (
             <Link
@@ -49,6 +58,9 @@ export function ModuleSwitcher() {
           );
         })}
       </nav>
+      <div className="ml-auto">
+        <WorkspaceSwitcher />
+      </div>
     </div>
   );
 }

@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { parseAndValidateAmount } from "@/lib/api-utils"
+import { requireTreasury, workspaceErrorResponse } from "@/lib/workspace"
 
 // POST - Transférer un montant entre la banque et la caisse (liquide)
 // Crée une paire de transactions (sortie sur la source, entrée sur la destination)
 // avec la catégorie "Transfert" → net global nul, le solde se déplace d'un compte à l'autre.
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    const ctx = await requireTreasury("WRITE")
 
     let body: { amount?: unknown; from?: string; notes?: string }
     try {
@@ -53,7 +49,8 @@ export async function POST(request: NextRequest) {
           account: from,
           category: "Transfert",
           description,
-          userId: session.user.id,
+          workspaceId: ctx.workspace.id,
+          userId: ctx.userId,
         },
       })
 
@@ -65,7 +62,8 @@ export async function POST(request: NextRequest) {
           account: to,
           category: "Transfert",
           description,
-          userId: session.user.id,
+          workspaceId: ctx.workspace.id,
+          userId: ctx.userId,
         },
       })
 
@@ -74,7 +72,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
-    console.error("Erreur lors du transfert:", error)
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

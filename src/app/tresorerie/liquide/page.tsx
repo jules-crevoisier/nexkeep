@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Sidebar } from '@/components/layout/sidebar'
+import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { CashTransactionForm, CashTransferForm } from '@/components/forms/cash-transaction-form'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -74,9 +74,8 @@ export default function LiquidePage() {
 
   return (
     <AuthGuard>
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <div className="flex-1 p-6 space-y-6">
+      <DashboardLayout>
+        <div className="space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
@@ -223,7 +222,7 @@ export default function LiquidePage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </DashboardLayout>
     </AuthGuard>
   )
 }

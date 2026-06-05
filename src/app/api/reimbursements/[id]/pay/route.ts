@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseAndValidateAmount } from '@/lib/api-utils'
+import { requireTreasury, workspaceErrorResponse } from '@/lib/workspace'
 
 // POST - Enregistrer un remboursement
 export async function POST(
@@ -11,13 +10,9 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
+    const ctx = await requireTreasury("WRITE")
 
-    let body: { amount?: unknown; method?: string; transferDate?: string; reference?: string; notes?: string }
+    let body: { amount?: string | number; method?: string; transferDate?: string; reference?: string; notes?: string }
     try {
       body = await request.json()
     } catch {
@@ -34,11 +29,11 @@ export async function POST(
     }
     const parsedAmount = amountValidation.amount!
 
-    // Vérifier que la demande existe et appartient à l'utilisateur
+    // Vérifier que la demande existe et appartient à l'organisation
     const reimbursementRequest = await prisma.reimbursementRequest.findFirst({
       where: {
         id: id,
-        userId: session.user.id
+        workspaceId: ctx.workspace.id
       }
     })
 
@@ -66,7 +61,8 @@ export async function POST(
           reference,
           notes,
           requestId: id,
-          userId: session.user.id
+          workspaceId: ctx.workspace.id,
+          userId: ctx.userId
         }
       })
 
@@ -83,7 +79,8 @@ export async function POST(
           type: 'expense',
           description: `Remboursement pour: ${reimbursementRequest.description}`,
           category: 'Remboursements',
-          userId: session.user.id
+          workspaceId: ctx.workspace.id,
+          userId: ctx.userId
         }
       })
 
@@ -92,10 +89,6 @@ export async function POST(
 
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
-    console.error('Erreur lors de l\'enregistrement du remboursement:', error)
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    )
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

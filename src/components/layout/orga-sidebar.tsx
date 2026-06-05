@@ -13,7 +13,6 @@ import {
   Home,
   CalendarRange,
   FolderKanban,
-  Users,
   LogOut,
   X,
   ListTodo,
@@ -25,7 +24,6 @@ const navigation = [
   { name: "Accueil", href: "/orga", icon: Home },
   { name: "Planning", href: "/orga/planning", icon: CalendarRange },
   { name: "Projets", href: "/orga/projects", icon: FolderKanban },
-  { name: "Membres", href: "/orga/membres", icon: Users },
 ];
 
 interface OrgaSidebarProps {

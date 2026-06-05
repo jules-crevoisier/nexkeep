@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { seedCategories } from "@/lib/seed-categories";
+import { requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 export async function POST() {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    await requireRole("ADMIN");
 
     const count = await seedCategories();
 
@@ -18,9 +13,11 @@ export async function POST() {
       count,
     });
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Categories seed error:", error);
-    return NextResponse.json({ 
-      error: "Erreur interne du serveur" 
+    return NextResponse.json({
+      error: "Erreur interne du serveur"
     }, { status: 500 });
   }
 }

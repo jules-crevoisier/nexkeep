@@ -48,8 +48,6 @@ export const authOptions: NextAuthOptions = {
           return {
             id: user.id,
             email: user.email,
-            budget: user.budget,
-            budgetInitial: user.budgetInitial,
           }
         } catch (error) {
           console.error("Auth error:", error);
@@ -62,18 +60,9 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt"
   },
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.budget = user.budget
-        token.budgetInitial = user.budgetInitial
-      }
-      return token
-    },
     async session({ session, token }) {
       if (token) {
         session.user.id = token.sub!
-        session.user.budget = token.budget as number
-        session.user.budgetInitial = token.budgetInitial as number
       }
       return session
     }

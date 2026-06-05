@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ensureDefaultCategories } from "@/lib/seed-categories";
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    await requireWorkspace();
 
     await ensureDefaultCategories();
 
@@ -23,20 +18,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(categories);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Categories fetch error:", error);
-    return NextResponse.json({ 
-      error: "Erreur interne du serveur" 
+    return NextResponse.json({
+      error: "Erreur interne du serveur"
     }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    await requireRole("ADMIN");
 
     const { name, type, color, icon } = await request.json();
 
@@ -74,9 +67,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(category);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Category creation error:", error);
-    return NextResponse.json({ 
-      error: "Erreur interne du serveur" 
+    return NextResponse.json({
+      error: "Erreur interne du serveur"
     }, { status: 500 });
   }
 }

@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireTreasury, workspaceErrorResponse } from '@/lib/workspace'
 
-// GET - Récupérer toutes les demandes de remboursement de l'utilisateur
+// GET - Récupérer toutes les demandes de remboursement de l'organisation
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
+    const ctx = await requireTreasury("READ")
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
@@ -19,7 +14,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit
 
     const where = {
-      userId: session.user.id, // Seulement les demandes de l'utilisateur connecté
+      workspaceId: ctx.workspace.id, // Seulement les demandes de l'organisation active
       ...(status && { status })
     }
 
@@ -46,22 +41,14 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error) {
-    console.error('Erreur lors de la récupération des demandes:', error)
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    )
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
 // POST - Créer une nouvelle demande de remboursement
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
+    const ctx = await requireTreasury("WRITE")
 
     let body: { requesterName?: string; requesterEmail?: string; amount?: unknown; description?: string; receiptUrl?: string; ribUrl?: string; notes?: string }
     try {
@@ -96,16 +83,13 @@ export async function POST(request: NextRequest) {
         receiptUrl: receiptUrl || null,
         ribUrl: ribUrl || null,
         notes: notes?.trim() || null,
-        userId: session.user.id
+        workspaceId: ctx.workspace.id,
+        userId: ctx.userId
       }
     })
 
     return NextResponse.json(reimbursementRequest, { status: 201 })
   } catch (error) {
-    console.error('Erreur lors de la création de la demande:', error)
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    )
+    return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

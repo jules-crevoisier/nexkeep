@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/projects/[id]
 export async function GET(
@@ -10,13 +9,10 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireWorkspace();
 
     const project = await prisma.project.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspace.id },
     });
 
     if (!project) {
@@ -25,6 +21,8 @@ export async function GET(
 
     return NextResponse.json(project);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur GET project:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -37,13 +35,10 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const existing = await prisma.project.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspace.id },
     });
     if (!existing) {
       return NextResponse.json({ error: "Projet non trouvé" }, { status: 404 });
@@ -65,6 +60,8 @@ export async function PATCH(
     const project = await prisma.project.update({ where: { id }, data });
     return NextResponse.json(project);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur PATCH project:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -77,13 +74,10 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const existing = await prisma.project.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspace.id },
     });
     if (!existing) {
       return NextResponse.json({ error: "Projet non trouvé" }, { status: 404 });
@@ -92,6 +86,8 @@ export async function DELETE(
     await prisma.project.delete({ where: { id } });
     return NextResponse.json({ message: "Projet supprimé" });
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur DELETE project:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

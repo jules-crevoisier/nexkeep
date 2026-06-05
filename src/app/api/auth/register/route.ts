@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { createWorkspaceForUser } from "@/lib/workspace-create"
+import { acceptInvitationForUser } from "@/lib/invitations"
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, initialBudget } = await request.json()
-
-    console.log("Registration attempt for:", email);
+    const { email, password, inviteToken } = await request.json()
 
     if (!email || !password) {
-      console.log("Missing email or password");
       return NextResponse.json({ error: "Email et mot de passe requis" }, { status: 400 })
     }
 
@@ -25,39 +24,35 @@ export async function POST(request: NextRequest) {
     }
 
     // Vérifier si l'utilisateur existe déjà
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    })
-
+    const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {
-      console.log("User already exists");
       return NextResponse.json({ error: "Un compte avec cet email existe déjà" }, { status: 400 })
     }
 
-    // Hasher le mot de passe
     const hashedPassword = await bcrypt.hash(password, 12)
-
-    // Créer l'utilisateur
-    const budgetInitialValue = initialBudget ? parseFloat(initialBudget) : 0;
     const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        budget: budgetInitialValue,
-        budgetInitial: budgetInitialValue
-      }
+      data: { email, password: hashedPassword },
     })
 
-    console.log("User created successfully:", user.id);
+    // Avec un token d'invitation valide correspondant à l'email : rejoindre l'org invitante.
+    // Sinon : créer une organisation personnelle par défaut.
+    let joinedWorkspaceId: string | null = null
+    if (inviteToken && typeof inviteToken === "string") {
+      joinedWorkspaceId = await acceptInvitationForUser(inviteToken, user.id, email)
+    }
+    if (!joinedWorkspaceId) {
+      const baseName = email.split("@")[0]
+      await createWorkspaceForUser(user.id, `Organisation de ${baseName}`)
+    }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: "Compte créé avec succès",
-      userId: user.id 
+      userId: user.id,
     })
   } catch (error) {
-    console.error("Registration error:", error);
-    return NextResponse.json({ 
-      error: "Erreur interne du serveur. Veuillez réessayer." 
+    console.error("Registration error:", error)
+    return NextResponse.json({
+      error: "Erreur interne du serveur. Veuillez réessayer.",
     }, { status: 500 })
   }
 }

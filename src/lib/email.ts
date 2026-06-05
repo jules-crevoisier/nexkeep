@@ -1,31 +1,107 @@
 import { Resend } from 'resend'
+import {
+  getResendFromAddress,
+  isResendConfigured,
+  logEmailDebug,
+} from '@/lib/email-config'
 
-// Configuration Resend
-const resend = new Resend(process.env.RESEND_API_KEY)
+export type { EmailConfigStatus } from '@/lib/email-config'
+export { getEmailConfigStatus, isEmailDebugEnabled, isResendConfigured } from '@/lib/email-config'
 
-// Fonction pour vérifier si Resend est configuré
-function isResendConfigured(): boolean {
-  return !!(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+// Client Resend instancié paresseusement (évite erreur au build si clé absente).
+let resendClient: Resend | null = null
+function getResend(): Resend {
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY)
+  return resendClient
+}
+
+async function sendEmail(params: {
+  context: string
+  to: string
+  subject: string
+  html: string
+}): Promise<void> {
+  const from = getResendFromAddress()
+
+  if (!isResendConfigured()) {
+    console.warn(`[email:${params.context}] RESEND_API_KEY absente — email non envoyé vers ${params.to}`)
+    logEmailDebug(params.context, { skipped: true, to: params.to })
+    return
+  }
+
+  logEmailDebug(params.context, { sending: true, to: params.to, from, subject: params.subject })
+
+  const { data, error } = await getResend().emails.send({
+    from,
+    to: [params.to],
+    subject: params.subject,
+    html: params.html,
+  })
+
+  if (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String((error as { message?: string }).message)
+        : String(error)
+    console.error(`[email:${params.context}] Erreur Resend:`, error)
+    logEmailDebug(params.context, { failed: true, error: message })
+    throw new Error(`Erreur Resend: ${message}`)
+  }
+
+  console.log(`[email:${params.context}] Envoyé à ${params.to}`, data?.id ? `(id: ${data.id})` : '')
+  logEmailDebug(params.context, { sent: true, messageId: data?.id })
+}
+
+export async function sendInvitationEmail(
+  to: string,
+  workspaceName: string,
+  token: string,
+  inviterEmail?: string | null
+): Promise<void> {
+  const link = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/invitations/${token}`
+  const inviter = inviterEmail ? `${inviterEmail} vous a invité` : 'Vous êtes invité(e)'
+
+  await sendEmail({
+    context: 'invitation',
+    to,
+    subject: `Invitation à rejoindre ${workspaceName}`,
+    html: `
+        <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #0f0f0f;">
+          <div style="background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 32px 24px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">NexKeep</h1>
+            <p style="color: #a1a1aa; margin: 8px 0 0 0; font-size: 14px;">Invitation à collaborer</p>
+          </div>
+          <div style="padding: 32px 24px; background: #0f0f0f;">
+            <p style="color: #ffffff; line-height: 1.6; font-size: 14px;">
+              ${inviter} à rejoindre l'organisation <strong>${workspaceName}</strong> sur NexKeep.
+            </p>
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${link}" style="background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-size: 14px; font-weight: 600;">
+                Rejoindre l'organisation
+              </a>
+            </div>
+            <p style="color: #71717a; font-size: 13px; line-height: 1.5;">
+              Si vous n'avez pas encore de compte, vous pourrez en créer un via ce lien.
+            </p>
+          </div>
+          <div style="background: #1a1a1a; border-top: 1px solid #2a2a2a; padding: 20px 24px; text-align: center;">
+            <p style="color: #71717a; margin: 0; font-size: 12px;">Email automatique - NexKeep</p>
+          </div>
+        </div>
+      `,
+  })
 }
 
 export async function sendReimbursementConfirmation(
   requesterEmail: string,
   requesterName: string,
   requestId: string
-) {
-  try {
-    // Vérifier si Resend est configuré
-    if (!isResendConfigured()) {
-      console.log('Resend non configuré - Email simulé pour:', requesterEmail)
-      console.log(`Confirmation de demande ${requestId} pour ${requesterName}`)
-      return
-    }
-
-    const { data, error } = await resend.emails.send({
-      from: process.env.RESEND_FROM || 'NexKeep <noreply@resend.dev>',
-      to: [requesterEmail],
-      subject: 'Confirmation de votre demande de remboursement',
-      html: `
+): Promise<void> {
+  await sendEmail({
+    context: 'reimbursement-confirmation',
+    to: requesterEmail,
+    subject: 'Confirmation de votre demande de remboursement',
+    html: `
         <head>
           <style>
             .im { color: #ffffff !important; }
@@ -79,18 +155,7 @@ export async function sendReimbursementConfirmation(
           </div>
         </div>
       `,
-    })
-
-    if (error) {
-      console.error('Erreur Resend:', error)
-      throw new Error(`Erreur Resend: ${error.message}`)
-    }
-
-    console.log('Email de confirmation envoyé à:', requesterEmail, 'ID:', data?.id)
-  } catch (error) {
-    console.error('Erreur lors de l\'envoi de l\'email:', error)
-    throw error
-  }
+  })
 }
 
 export async function sendAdminNotification(
@@ -100,22 +165,12 @@ export async function sendAdminNotification(
   description: string,
   requestId: string,
   budgetOwnerEmail: string
-) {
-  try {
-    // Vérifier si Resend est configuré
-    if (!isResendConfigured()) {
-      console.log('Resend non configuré - Notification admin simulée')
-      console.log(`Nouvelle demande ${requestId}: ${requesterName} - ${amount}€ pour ${budgetOwnerEmail}`)
-      return
-    }
-
-    const adminEmail = budgetOwnerEmail
-    
-    const { data, error } = await resend.emails.send({
-      from: process.env.RESEND_FROM || 'NexKeep <noreply@resend.dev>',
-      to: [adminEmail],
-      subject: `Nouvelle demande de remboursement pour votre budget - ${requesterName}`,
-      html: `
+): Promise<void> {
+  await sendEmail({
+    context: 'reimbursement-admin',
+    to: budgetOwnerEmail,
+    subject: `Nouvelle demande de remboursement pour votre budget - ${requesterName}`,
+    html: `
         <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #0f0f0f;">
           <div style="background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 32px 24px; text-align: center;">
             <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.025em;">NexKeep</h1>
@@ -173,16 +228,5 @@ export async function sendAdminNotification(
           </div>
         </div>
       `,
-    })
-
-    if (error) {
-      console.error('Erreur Resend:', error)
-      throw new Error(`Erreur Resend: ${error.message}`)
-    }
-
-    console.log('Notification admin envoyée à:', adminEmail, 'ID:', data?.id)
-  } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification admin:', error)
-    throw error
-  }
+  })
 }

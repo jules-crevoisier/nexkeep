@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 export async function DELETE(
   request: NextRequest,
@@ -9,11 +8,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    await requireRole("ADMIN");
 
     const categoryId = id;
 
@@ -44,13 +39,15 @@ export async function DELETE(
       where: { id: categoryId }
     });
 
-    return NextResponse.json({ 
-      message: "Catégorie supprimée avec succès" 
+    return NextResponse.json({
+      message: "Catégorie supprimée avec succès"
     });
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Category deletion error:", error);
-    return NextResponse.json({ 
-      error: "Erreur interne du serveur" 
+    return NextResponse.json({
+      error: "Erreur interne du serveur"
     }, { status: 500 });
   }
 }

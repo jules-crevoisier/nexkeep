@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseAndValidateAmount } from "@/lib/api-utils";
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
-async function getOwnedGroup(id: string, userId: string) {
+async function getOwnedGroup(id: string, workspaceId: string) {
   return prisma.taskGroup.findFirst({
-    where: { id, project: { userId } },
+    where: { id, project: { workspaceId } },
     select: { id: true },
   });
 }
@@ -18,13 +17,10 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireWorkspace();
 
     const group = await prisma.taskGroup.findFirst({
-      where: { id, project: { userId: session.user.id } },
+      where: { id, project: { workspaceId: ctx.workspace.id } },
       include: {
         project: { select: { id: true, name: true, color: true } },
         _count: { select: { tasks: true } },
@@ -36,6 +32,8 @@ export async function GET(
 
     return NextResponse.json(group);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur GET group:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -48,12 +46,9 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
-    const existing = await getOwnedGroup(id, session.user.id);
+    const existing = await getOwnedGroup(id, ctx.workspace.id);
     if (!existing) {
       return NextResponse.json({ error: "Groupe non trouvé" }, { status: 404 });
     }
@@ -80,6 +75,8 @@ export async function PATCH(
     const group = await prisma.taskGroup.update({ where: { id }, data });
     return NextResponse.json(group);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur PATCH group:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -92,12 +89,9 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
-    const existing = await getOwnedGroup(id, session.user.id);
+    const existing = await getOwnedGroup(id, ctx.workspace.id);
     if (!existing) {
       return NextResponse.json({ error: "Groupe non trouvé" }, { status: 404 });
     }
@@ -105,6 +99,8 @@ export async function DELETE(
     await prisma.taskGroup.delete({ where: { id } });
     return NextResponse.json({ message: "Groupe supprimé" });
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur DELETE group:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

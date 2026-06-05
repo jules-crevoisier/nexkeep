@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/projects?status=active - Liste des projets (avec compteur de tâches)
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireWorkspace();
 
     const status = new URL(request.url).searchParams.get("status");
-    const where: { userId: string; status?: string } = {
-      userId: session.user.id,
+    const where: { workspaceId: string; status?: string } = {
+      workspaceId: ctx.workspace.id,
     };
     if (status) where.status = status;
 
@@ -25,6 +21,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(projects);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur GET projects:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
@@ -33,10 +31,7 @@ export async function GET(request: NextRequest) {
 // POST /api/orga/projects - Créer un projet
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
+    const ctx = await requireRole("MEMBER");
 
     const { name, description, color, status, budget, endDate } =
       await request.json();
@@ -52,12 +47,15 @@ export async function POST(request: NextRequest) {
         status: typeof status === "string" ? status : "active",
         budget: budget === "" || budget == null ? null : Number(budget),
         endDate: endDate ? new Date(endDate) : null,
-        userId: session.user.id,
+        workspaceId: ctx.workspace.id,
+        userId: ctx.userId,
       },
     });
 
     return NextResponse.json(project);
   } catch (error) {
+    const res = workspaceErrorResponse(error);
+    if (res) return res;
     console.error("Erreur POST project:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Nunito } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/session-provider";
+import { WorkspaceProvider } from "@/components/providers/workspace-provider";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { Toaster } from "sonner";
 
@@ -33,8 +34,10 @@ export default function RootLayout({
           storageKey="nexkeep-theme"
         >
           <AuthProvider>
-            {children}
-            <Toaster position="top-right" richColors />
+            <WorkspaceProvider>
+              {children}
+              <Toaster position="top-right" richColors />
+            </WorkspaceProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

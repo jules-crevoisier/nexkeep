@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { createWorkspaceForUser } from '@/lib/workspace-create'
 
 // POST - Créer un utilisateur admin
 export async function POST(request: NextRequest) {
@@ -27,10 +28,11 @@ export async function POST(request: NextRequest) {
       data: {
         email: adminEmail,
         password: hashedPassword,
-        budget: 0,
-        budgetInitial: 0
       }
     })
+
+    // Organisation personnelle par défaut (OWNER + trésorerie).
+    await createWorkspaceForUser(adminUser.id, "Organisation admin")
 
     return NextResponse.json({
       success: true,

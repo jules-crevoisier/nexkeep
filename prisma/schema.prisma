@@ -10,17 +10,106 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TreasuryAccess {
+  NONE
+  READ
+  WRITE
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+// Tenant de collaboration (UI = "Organisation")
+model Workspace {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String?  @unique
+  // Tresorerie (deplacee depuis User)
+  budget        Float    @default(0)
+  budgetInitial Float    @default(0)
+  cashInitial   Float    @default(0)
+  shareToken    String?  @unique
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  members     WorkspaceMember[]
+  invitations WorkspaceInvitation[]
+
+  transactions          Transaction[]
+  reimbursementRequests ReimbursementRequest[]
+  reimbursements        Reimbursement[]
+  organisations         Organisation[]
+  clients               Client[]
+  articles              Article[]
+  invoices              Invoice[]
+  projects              Project[]
+  statuses              Status[]
+  tasks                 Task[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id             String         @id @default(cuid())
+  role           WorkspaceRole  @default(MEMBER)
+  treasuryAccess TreasuryAccess @default(NONE)
+  displayName    String?
+  color          String         @default("#3b82f6")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assignments TaskAssignee[]
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvitation {
+  id             String           @id @default(cuid())
+  email          String
+  role           WorkspaceRole    @default(MEMBER)
+  treasuryAccess TreasuryAccess   @default(NONE)
+  token          String           @unique
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime
+  invitedById    String?
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, email])
+  @@index([email])
+  @@map("workspace_invitations")
+}
+
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
   password      String
-  budget        Float    @default(0)
-  budgetInitial Float    @default(0)
-  cashInitial   Float    @default(0) // Solde de caisse (liquide) initial
-  shareToken    String?  @unique // Token unique pour partager le formulaire
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  
+
   transactions Transaction[]
   reimbursementRequests ReimbursementRequest[]
   reimbursements Reimbursement[]
@@ -31,7 +120,7 @@ model User {
   projects Project[]
   tasks Task[]
   statuses Status[]
-  members Member[]
+  memberships WorkspaceMember[]
 
   @@map("users")
 }
@@ -47,9 +136,13 @@ model Transaction {
   date        DateTime @default(now())
   createdAt   DateTime @default(now())
   
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
   @@map("transactions")
 }
 
@@ -79,11 +172,15 @@ model ReimbursementRequest {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   reimbursements Reimbursement[]
-  
+
+  @@index([workspaceId])
   @@map("reimbursement_requests")
 }
 
@@ -99,9 +196,13 @@ model Reimbursement {
   requestId String
   request   ReimbursementRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
   @@map("reimbursements")
 }
 
@@ -122,11 +223,15 @@ model Organisation {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   invoices Invoice[]
-  
+
+  @@index([workspaceId])
   @@map("organisations")
 }
 
@@ -148,11 +253,15 @@ model Client {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   invoices Invoice[]
-  
+
+  @@index([workspaceId])
   @@map("clients")
 }
 
@@ -168,11 +277,15 @@ model Article {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   invoiceItems InvoiceItem[]
-  
+
+  @@index([workspaceId])
   @@map("articles")
 }
 
@@ -190,17 +303,21 @@ model Invoice {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
   
   organisationId String
   organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   
   clientId String
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   items InvoiceItem[]
-  
+
+  @@index([workspaceId])
   @@map("invoices")
 }
 
@@ -237,12 +354,16 @@ model Project {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   tasks  Task[]
   groups TaskGroup[]
 
+  @@index([workspaceId])
   @@map("projects")
 }
 
@@ -275,8 +396,8 @@ model Task {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   projectId String?  // null = "tache courante" (inbox)
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -291,8 +412,12 @@ model Task {
   parent   Task?    @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
   subtasks Task[]   @relation("Subtasks")
 
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   assignees TaskAssignee[]
 
+  @@index([workspaceId])
   @@map("tasks")
 }
 
@@ -307,36 +432,24 @@ model Status {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   tasks Task[]
 
+  @@index([workspaceId])
   @@map("statuses")
-}
-
-model Member {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?
-  color     String   @default("#3b82f6")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  assignments TaskAssignee[]
-
-  @@map("members")
 }
 
 model TaskAssignee {
   taskId   String
   memberId String
 
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  task   Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@id([taskId, memberId])
   @@map("task_assignees")
