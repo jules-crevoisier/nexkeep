@@ -5,6 +5,7 @@ import { AuthProvider } from "@/components/providers/session-provider";
 import { WorkspaceProvider } from "@/components/providers/workspace-provider";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { Toaster } from "sonner";
+import { PermissionDeniedListener } from "@/components/permissions/permission-denied-listener";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -36,6 +37,7 @@ export default function RootLayout({
           <AuthProvider>
             <WorkspaceProvider>
               {children}
+              <PermissionDeniedListener />
               <Toaster position="top-right" richColors />
             </WorkspaceProvider>
           </AuthProvider>
