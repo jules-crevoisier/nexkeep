@@ -20,11 +20,13 @@ export function useGuardedAction(allowed: boolean, deniedMessage: string) {
     [allowed]
   )
 
+  /** Retourne un handler à passer à onClick — n'exécute pas fn au render. */
   const run = useCallback(
-    (fn: () => void) => {
-      if (allowed) fn()
-      else setDeniedOpen(true)
-    },
+    (fn: () => void): (() => void) =>
+      () => {
+        if (allowed) fn()
+        else setDeniedOpen(true)
+      },
     [allowed]
   )
 
