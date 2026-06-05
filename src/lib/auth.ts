@@ -18,12 +18,11 @@ export const authOptions: NextAuthOptions = {
             return null
           }
 
-          console.log("Attempting to find user:", credentials.email);
+          const email = credentials.email.trim().toLowerCase()
+          console.log("Attempting to find user:", email);
 
           const user = await prisma.user.findUnique({
-            where: {
-              email: credentials.email
-            }
+            where: { email },
           })
 
           if (!user) {
@@ -60,12 +59,22 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt"
   },
   callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.sub = user.id
+        token.email = user.email
+      }
+      return token
+    },
     async session({ session, token }) {
-      if (token) {
-        session.user.id = token.sub!
+      if (token?.sub) {
+        session.user.id = token.sub
+      }
+      if (typeof token?.email === "string") {
+        session.user.email = token.email
       }
       return session
-    }
+    },
   },
   pages: {
     signIn: "/login",

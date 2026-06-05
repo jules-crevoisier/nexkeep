@@ -6,11 +6,16 @@ import { acceptInvitationForUser } from "@/lib/invitations"
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, inviteToken } = await request.json()
+    const body = await request.json()
+    const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : ""
+    const password = body.password
+    const inviteToken = body.inviteToken
 
-    if (!email || !password) {
+    if (!rawEmail || !password) {
       return NextResponse.json({ error: "Email et mot de passe requis" }, { status: 400 })
     }
+
+    const email = rawEmail
 
     // Validation de l'email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -38,7 +43,10 @@ export async function POST(request: NextRequest) {
     // Sinon : créer une organisation personnelle par défaut.
     let joinedWorkspaceId: string | null = null
     if (inviteToken && typeof inviteToken === "string") {
-      joinedWorkspaceId = await acceptInvitationForUser(inviteToken, user.id, email)
+      const accepted = await acceptInvitationForUser(inviteToken, user.id, email)
+      if (accepted.success) {
+        joinedWorkspaceId = accepted.workspaceId
+      }
     }
     if (!joinedWorkspaceId) {
       const baseName = email.split("@")[0]

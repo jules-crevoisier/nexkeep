@@ -18,6 +18,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invite = searchParams.get("invite");
+  const callbackUrl = searchParams.get("callbackUrl") || "/hub";
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -31,7 +32,6 @@ function LoginForm() {
     setLoading(true);
     setError("");
 
-    // Validation côté client
     if (!email || !password) {
       setError("Veuillez remplir tous les champs");
       setLoading(false);
@@ -40,12 +40,10 @@ function LoginForm() {
 
     try {
       const result = await signIn("credentials", {
-        email,
+        email: email.trim().toLowerCase(),
         password,
         redirect: false,
       });
-
-      console.log("Sign in result:", result);
 
       if (result?.error) {
         if (result.error === "CredentialsSignin") {
@@ -54,21 +52,30 @@ function LoginForm() {
           setError("Erreur de connexion. Veuillez réessayer.");
         }
       } else if (result?.ok) {
-        // Si on vient d'un lien d'invitation, on l'accepte avant de continuer.
         if (invite) {
           try {
-            await fetch(`/api/invitations/${invite}/accept`, { method: "POST" });
+            const acceptRes = await fetch(`/api/invitations/${invite}/accept`, {
+              method: "POST",
+            });
+            if (!acceptRes.ok) {
+              const data = await acceptRes.json().catch(() => null);
+              // Deja membre via inscription : on continue vers le hub
+              if (data?.reason !== "already_used") {
+                setError(data?.error ?? "Invitation non acceptée");
+                setLoading(false);
+                return;
+              }
+            }
           } catch {
-            // sans blocage : l'invitation reste acceptable depuis le hub
+            // L'invitation reste acceptable depuis le hub
           }
         }
-        router.push("/");
+        router.push(callbackUrl);
         router.refresh();
       } else {
         setError("Erreur inattendue");
       }
-    } catch (error) {
-      console.error("Login error:", error);
+    } catch {
       setError("Une erreur est survenue. Veuillez réessayer.");
     }
     setLoading(false);
@@ -81,12 +88,12 @@ function LoginForm() {
           <span className="text-3xl font-bold font-nunito text-primary">NexKeep</span>
           <p className="text-muted-foreground mt-4">Gestionnaire de budget pour associations</p>
         </div>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Connexion</CardTitle>
             <CardDescription>
-              Connectez-vous pour accéder à votre budget
+              Connectez-vous pour accéder à vos organisations
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -103,9 +110,9 @@ function LoginForm() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
+                <Input
+                  id="email"
+                  type="email"
                   placeholder="votre@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -114,9 +121,9 @@ function LoginForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
-                <Input 
-                  id="password" 
-                  type="password" 
+                <Input
+                  id="password"
+                  type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

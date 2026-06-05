@@ -84,8 +84,8 @@ function HubContent() {
       const res = await fetch(`/api/invitations/${token}/accept`, {
         method: "POST",
       });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error);
       await refresh();
       if (data.workspaceId) await switchWorkspace(data.workspaceId);
       toast.success("Invitation acceptée");

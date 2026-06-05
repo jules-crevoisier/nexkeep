@@ -59,9 +59,18 @@ export default function InvitationPage({
       const res = await fetch(`/api/invitations/${token}/accept`, {
         method: "POST",
       });
-      if (!res.ok) throw new Error();
-      toast.success("Invitation acceptée");
-      router.push("/");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(data?.error ?? "Impossible d'accepter l'invitation");
+        setAccepting(false);
+        return;
+      }
+      toast.success(
+        data?.alreadyMember
+          ? "Vous êtes déjà membre de cette organisation"
+          : "Invitation acceptée"
+      );
+      router.push("/hub");
       router.refresh();
     } catch {
       toast.error("Impossible d'accepter l'invitation");
@@ -88,7 +97,7 @@ export default function InvitationPage({
             </CardHeader>
             <CardContent>
               <Button asChild className="w-full">
-                <Link href="/">Retour à l&apos;accueil</Link>
+                <Link href="/hub">Retour au hub</Link>
               </Button>
             </CardContent>
           </>
