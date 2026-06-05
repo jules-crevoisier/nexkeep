@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parseAndValidateAmount } from '@/lib/api-utils'
+import { ACTIVITY_TYPES, recordActivity } from '@/lib/activity'
 import { requireTreasury, workspaceErrorResponse } from '@/lib/workspace'
 
 // POST - Enregistrer un remboursement
@@ -85,6 +86,15 @@ export async function POST(
       })
 
       return reimbursement
+    })
+
+    await recordActivity({
+      workspaceId: ctx.workspace.id,
+      type: ACTIVITY_TYPES.REIMBURSEMENT_PAID,
+      title: `Remboursement payé — ${reimbursementRequest.requesterName}`,
+      description: `${parsedAmount.toFixed(2)} €`,
+      actorId: ctx.userId,
+      metadata: { requestId: id, reimbursementId: result.id, amount: parsedAmount },
     })
 
     return NextResponse.json(result, { status: 201 })

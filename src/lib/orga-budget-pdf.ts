@@ -28,91 +28,98 @@ const MUTED = { r: 100, g: 116, b: 139 };
 const SUCCESS = { r: 5, g: 150, b: 105 };
 const DANGER = { r: 220, g: 38, b: 38 };
 
-/**
- * Montants compatibles jsPDF (évite les espaces insécables U+202F d'Intl qui
- * s'affichent comme « 1 / 0 0 0 » avec la police Helvetica).
- */
+/** Texte ASCII-safe pour Helvetica (jsPDF). */
+const ascii = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const fmtMoney = (v: number): string => {
   const [intPart, dec] = Math.abs(v).toFixed(2).split(".");
   const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const sign = v < 0 ? "-" : "";
-  return `${sign}${grouped},${dec} €`;
+  return `${sign}${grouped},${dec} EUR`;
 };
 
 const fmtDate = (iso: string | null): string => {
-  if (!iso) return "Non définie";
-  return new Date(iso).toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  if (!iso) return "Non definie";
+  const d = new Date(iso);
+  const months = [
+    "janvier", "fevrier", "mars", "avril", "mai", "juin",
+    "juillet", "aout", "septembre", "octobre", "novembre", "decembre",
+  ];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+const fmtDateTime = (): string => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
 const pct = (part: number, total: number): string =>
-  total > 0 ? `${((part / total) * 100).toFixed(1)} %` : "—";
+  total > 0 ? `${((part / total) * 100).toFixed(1)} %` : "-";
 
-const safeFilename = (name: string): string =>
-  name
+export const safeBudgetFilename = (name: string): string =>
+  ascii(name)
     .replace(/[^\w\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-")
     .slice(0, 40) || "projet";
 
 /**
- * Génère et télécharge un PDF du budget prévisionnel (projet + pôles).
+ * Genere le PDF cote serveur (fiable sur Vercel, contrairement au bundle client).
  */
-export function downloadBudgetPreviewPdf(input: BudgetPdfInput): void {
+export function generateBudgetPreviewPdfBuffer(input: BudgetPdfInput): Buffer {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
   let y = 0;
 
   const { project, groups } = input;
+  const projectName = ascii(project.name);
   const allocated = groups.reduce((sum, g) => sum + (g.budget ?? 0), 0);
-  const remaining =
-    project.budget != null ? project.budget - allocated : null;
+  const remaining = project.budget != null ? project.budget - allocated : null;
   const over = remaining != null && remaining < 0;
-  const statusLabel = projectStatusMeta(project.status).label;
-  const exportedAt = new Date().toLocaleString("fr-FR");
+  const statusLabel = ascii(projectStatusMeta(project.status).label);
 
-  // —— En-tête ——
   doc.setFillColor(PRIMARY.r, PRIMARY.g, PRIMARY.b);
   doc.rect(0, 0, pageWidth, 42, "F");
 
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text("NEXKEEP · Organisation", margin, 12);
+  doc.text("NEXKEEP - Organisation", margin, 12);
 
   doc.setFontSize(20);
-  doc.text("Budget prévisionnel", margin, 24);
+  doc.text("Budget previsionnel", margin, 24);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text(`Exporté le ${exportedAt}`, pageWidth - margin, 12, {
-    align: "right",
-  });
+  doc.text(`Exporte le ${fmtDateTime()}`, pageWidth - margin, 12, { align: "right" });
 
   y = 52;
 
-  // —— Bloc projet ——
   doc.setTextColor(TEXT.r, TEXT.g, TEXT.b);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text(project.name, margin, y);
+  doc.text(projectName, margin, y);
   y += 8;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(MUTED.r, MUTED.g, MUTED.b);
   doc.text(`Statut : ${statusLabel}`, margin, y);
-  doc.text(`Date envisagée : ${fmtDate(project.endDate)}`, pageWidth / 2, y);
+  doc.text(`Date envisagee : ${fmtDate(project.endDate)}`, pageWidth / 2, y);
   y += 6;
 
   if (project.description?.trim()) {
     doc.setTextColor(TEXT.r, TEXT.g, TEXT.b);
     const descLines = doc.splitTextToSize(
-      project.description.trim(),
+      ascii(project.description.trim()),
       pageWidth - margin * 2
     );
     doc.text(descLines, margin, y);
@@ -121,11 +128,10 @@ export function downloadBudgetPreviewPdf(input: BudgetPdfInput): void {
     y += 4;
   }
 
-  // —— Synthèse (encadrés) ——
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(TEXT.r, TEXT.g, TEXT.b);
-  doc.text("Synthèse budgétaire", margin, y);
+  doc.text("Synthese budgetaire", margin, y);
   y += 6;
 
   const boxW = (pageWidth - margin * 2 - 8) / 3;
@@ -135,80 +141,60 @@ export function downloadBudgetPreviewPdf(input: BudgetPdfInput): void {
   if (project.budget != null) {
     boxes.push(
       { label: "Budget total", value: fmtMoney(project.budget) },
-      { label: "Alloué aux pôles", value: fmtMoney(allocated) },
+      { label: "Alloue aux poles", value: fmtMoney(allocated) },
       {
-        label: over ? "Dépassement" : "Restant",
-        value: remaining != null ? fmtMoney(Math.abs(remaining)) : "—",
+        label: over ? "Depassement" : "Restant",
+        value: remaining != null ? fmtMoney(Math.abs(remaining)) : "-",
         accent: over ? "bad" : "ok",
       }
     );
   } else {
-    boxes.push({
-      label: "Total alloué (pôles)",
-      value: fmtMoney(allocated),
-    });
+    boxes.push({ label: "Total alloue (poles)", value: fmtMoney(allocated) });
   }
 
   boxes.forEach((box, i) => {
     const x = margin + i * (boxW + 4);
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(x, y, boxW, boxH, 2, 2, "FD");
+    doc.rect(x, y, boxW, boxH, "FD");
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(MUTED.r, MUTED.g, MUTED.b);
     doc.text(box.label, x + 4, y + 7);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    if (box.accent === "bad") {
-      doc.setTextColor(DANGER.r, DANGER.g, DANGER.b);
-    } else if (box.accent === "ok") {
-      doc.setTextColor(SUCCESS.r, SUCCESS.g, SUCCESS.b);
-    } else {
-      doc.setTextColor(TEXT.r, TEXT.g, TEXT.b);
-    }
-    const valueLines = doc.splitTextToSize(box.value, boxW - 8);
-    doc.text(valueLines, x + 4, y + 16);
+    if (box.accent === "bad") doc.setTextColor(DANGER.r, DANGER.g, DANGER.b);
+    else if (box.accent === "ok") doc.setTextColor(SUCCESS.r, SUCCESS.g, SUCCESS.b);
+    else doc.setTextColor(TEXT.r, TEXT.g, TEXT.b);
+    doc.text(doc.splitTextToSize(box.value, boxW - 8), x + 4, y + 16);
   });
 
   y += boxH + 10;
 
-  // —— Tableau pôles ——
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(TEXT.r, TEXT.g, TEXT.b);
-  doc.text("Répartition par pôle", margin, y);
+  doc.text("Repartition par pole", margin, y);
   y += 4;
 
   const head = project.budget
-    ? ["Pôle", "Montant alloué", "Part du budget"]
-    : ["Pôle", "Montant alloué"];
+    ? ["Pole", "Montant alloue", "Part du budget"]
+    : ["Pole", "Montant alloue"];
 
   const body: string[][] = groups.map((g) => {
-    const row = [
-      g.name,
-      g.budget != null ? fmtMoney(g.budget) : "—",
-    ];
+    const row = [ascii(g.name), g.budget != null ? fmtMoney(g.budget) : "-"];
     if (project.budget != null) {
-      row.push(g.budget != null ? pct(g.budget, project.budget) : "—");
+      row.push(g.budget != null ? pct(g.budget, project.budget) : "-");
     }
     return row;
   });
 
   if (remaining != null && remaining > 0 && project.budget != null) {
-    body.push([
-      "Non alloué",
-      fmtMoney(remaining),
-      pct(remaining, project.budget),
-    ]);
+    body.push(["Non alloue", fmtMoney(remaining), pct(remaining, project.budget)]);
   }
 
   if (groups.length === 0) {
-    body.push(
-      project.budget
-        ? ["Aucun pôle défini", "—", "—"]
-        : ["Aucun pôle défini", "—"]
-    );
+    body.push(project.budget ? ["Aucun pole defini", "-", "-"] : ["Aucun pole defini", "-"]);
   }
 
   autoTable(doc, {
@@ -226,9 +212,7 @@ export function downloadBudgetPreviewPdf(input: BudgetPdfInput): void {
       textColor: 255,
       fontStyle: "bold",
     },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252],
-    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
       0: { halign: "left" },
       1: { halign: "right" },
@@ -236,32 +220,18 @@ export function downloadBudgetPreviewPdf(input: BudgetPdfInput): void {
     },
     foot:
       project.budget != null
-        ? [
-            [
-              "Total alloué",
-              fmtMoney(allocated),
-              pct(allocated, project.budget),
-            ],
-          ]
+        ? [["Total alloue", fmtMoney(allocated), pct(allocated, project.budget)]]
         : undefined,
     footStyles: {
       fillColor: [241, 245, 249],
       textColor: [TEXT.r, TEXT.g, TEXT.b],
       fontStyle: "bold",
     },
-    didParseCell: (data) => {
-      if (data.section !== "foot") return;
-      if (data.column.index === 1 || data.column.index === 2) {
-        data.cell.styles.halign = "right";
-      }
-    },
   });
 
   const finalY =
-    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-      ?.finalY ?? y + 40;
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 40;
 
-  // —— Pied de page ——
   const footerY = Math.min(finalY + 14, doc.internal.pageSize.getHeight() - 16);
   doc.setDrawColor(226, 232, 240);
   doc.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
@@ -269,11 +239,11 @@ export function downloadBudgetPreviewPdf(input: BudgetPdfInput): void {
   doc.setFontSize(8);
   doc.setTextColor(MUTED.r, MUTED.g, MUTED.b);
   doc.text(
-    "Document généré par NexKeep — Module Organisation. À titre indicatif.",
+    "Document genere par NexKeep - Module Organisation. A titre indicatif.",
     margin,
     footerY
   );
-  doc.text(`Projet : ${project.name}`, margin, footerY + 4);
+  doc.text(`Projet : ${projectName}`, margin, footerY + 4);
 
-  doc.save(`budget-prev-${safeFilename(project.name)}.pdf`);
+  return Buffer.from(doc.output("arraybuffer"));
 }

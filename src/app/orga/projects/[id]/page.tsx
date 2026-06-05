@@ -156,7 +156,7 @@ export default function ProjectBoardPage({
               <div className="grid gap-3 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
                 <ProjectUrgentTasksTable projectId={id} />
                 {project && (
-                  <ProjectBudgetPreview project={project} groups={groups} />
+                  <ProjectBudgetPreview projectId={id} project={project} groups={groups} />
                 )}
               </div>
             </>

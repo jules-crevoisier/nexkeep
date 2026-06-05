@@ -3,6 +3,7 @@ import type { WorkspaceRole, TreasuryAccess } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireRoleIn, workspaceErrorResponse } from "@/lib/workspace"
 import { newInvitationToken, invitationExpiry } from "@/lib/invitations"
+import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
 import { sendInvitationEmail } from "@/lib/email"
 
 const ROLES: WorkspaceRole[] = ["OWNER", "ADMIN", "MEMBER", "VIEWER"]
@@ -97,8 +98,19 @@ export async function POST(
       },
     })
 
+    const inviter = await prisma.user.findUnique({ where: { id: ctx.userId }, select: { email: true } })
+
+    await recordActivity({
+      workspaceId: id,
+      type: ACTIVITY_TYPES.INVITATION_SENT,
+      title: `Invitation envoyée à ${email}`,
+      description: `Rôle : ${role}`,
+      actorId: ctx.userId,
+      actorEmail: inviter?.email ?? null,
+      metadata: { invitationId: invitation.id, email, role },
+    })
+
     try {
-      const inviter = await prisma.user.findUnique({ where: { id: ctx.userId }, select: { email: true } })
       await sendInvitationEmail(email, ctx.workspace.name, token, inviter?.email)
     } catch (mailErr) {
       console.error("Envoi invitation échoué:", mailErr)

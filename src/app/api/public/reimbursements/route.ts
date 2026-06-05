@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { ACTIVITY_TYPES, recordActivity } from '@/lib/activity'
 import { sendReimbursementConfirmation, sendAdminNotification } from '@/lib/email'
+import { checkRateLimits, getClientIp } from '@/lib/rate-limit'
 
 // POST - Créer une nouvelle demande de remboursement (publique)
 export async function POST(request: NextRequest) {
@@ -75,35 +77,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Anti-spam : limite le nombre de demandes publiques (endpoint non authentifié
-    // qui déclenche l'envoi d'emails vers une adresse fournie par l'appelant).
     const normalizedEmail = requesterEmail.trim().toLowerCase()
-    const now = Date.now()
-    const tenMinutesAgo = new Date(now - 10 * 60 * 1000)
-    const oneHourAgo = new Date(now - 60 * 60 * 1000)
+    const clientIp = getClientIp(request)
 
-    const [recentForWorkspace, recentForEmail] = await Promise.all([
-      prisma.reimbursementRequest.count({
-        where: {
-          workspaceId: workspace.id,
-          isPublicRequest: true,
-          createdAt: { gt: tenMinutesAgo },
-        },
-      }),
-      prisma.reimbursementRequest.count({
-        where: {
-          workspaceId: workspace.id,
-          isPublicRequest: true,
-          requesterEmail: normalizedEmail,
-          createdAt: { gt: oneHourAgo },
-        },
-      }),
+    const rateLimit = await checkRateLimits([
+      { key: `pub-reimb:ip:${clientIp}`, limit: 10, windowMs: 60 * 60 * 1000 },
+      { key: `pub-reimb:token:${token}`, limit: 20, windowMs: 60 * 60 * 1000 },
+      { key: `pub-reimb:ws:${workspace.id}`, limit: 5, windowMs: 10 * 60 * 1000 },
+      { key: `pub-reimb:email:${workspace.id}:${normalizedEmail}`, limit: 3, windowMs: 60 * 60 * 1000 },
     ])
 
-    if (recentForWorkspace >= 5 || recentForEmail >= 3) {
+    if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Trop de demandes envoyées. Merci de réessayer plus tard.' },
-        { status: 429 }
+        {
+          status: 429,
+          headers: rateLimit.retryAfterSeconds
+            ? { 'Retry-After': String(rateLimit.retryAfterSeconds) }
+            : undefined,
+        }
       )
     }
 
@@ -121,6 +113,19 @@ export async function POST(request: NextRequest) {
         isPublicRequest: true, // Marquer comme demande publique
         status: 'pending'
       }
+    })
+
+    await recordActivity({
+      workspaceId: workspace.id,
+      type: ACTIVITY_TYPES.REIMBURSEMENT_REQUESTED,
+      title: `Demande de remboursement — ${requesterName.trim()}`,
+      description: `${parsedAmount.toFixed(2)} € · ${description.trim()}`,
+      actorEmail: normalizedEmail,
+      metadata: {
+        requestId: reimbursementRequest.id,
+        amount: parsedAmount,
+        isPublic: true,
+      },
     })
 
     // Envoyer les emails de notification

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
 import { acceptInvitationForUser } from "@/lib/invitations"
 
 // POST /api/invitations/[token]/accept - accepter une invitation (utilisateur connecté)
@@ -24,6 +25,15 @@ export async function POST(
         { status: 400 }
       )
     }
+
+    await recordActivity({
+      workspaceId,
+      type: ACTIVITY_TYPES.INVITATION_ACCEPTED,
+      title: `${email} a rejoint l'organisation`,
+      actorId: userId,
+      actorEmail: email,
+      metadata: { token },
+    })
 
     return NextResponse.json({ ok: true, workspaceId })
   } catch (error) {

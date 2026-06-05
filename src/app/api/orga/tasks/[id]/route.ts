@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity";
 import { taskInclude, setAssignees } from "@/lib/orga-task";
 import { requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
@@ -90,6 +91,18 @@ export async function PATCH(
       data,
       include: taskInclude,
     });
+
+    const wasDone = existing.completedAt != null;
+    const isDone = task.completedAt != null;
+    if (!wasDone && isDone) {
+      await recordActivity({
+        workspaceId,
+        type: ACTIVITY_TYPES.TASK_COMPLETED,
+        title: `Tâche terminée — ${task.title}`,
+        actorId: ctx.userId,
+        metadata: { taskId: task.id, projectId: task.projectId },
+      });
+    }
 
     return NextResponse.json(task);
   } catch (error) {

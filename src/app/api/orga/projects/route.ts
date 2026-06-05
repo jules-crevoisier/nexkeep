@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity";
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace";
 
 // GET /api/orga/projects?status=active - Liste des projets (avec compteur de tâches)
@@ -50,6 +51,14 @@ export async function POST(request: NextRequest) {
         workspaceId: ctx.workspace.id,
         userId: ctx.userId,
       },
+    });
+
+    await recordActivity({
+      workspaceId: ctx.workspace.id,
+      type: ACTIVITY_TYPES.PROJECT_CREATED,
+      title: `Projet créé — ${project.name}`,
+      actorId: ctx.userId,
+      metadata: { projectId: project.id },
     });
 
     return NextResponse.json(project);

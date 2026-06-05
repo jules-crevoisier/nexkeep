@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
 import { requireTreasury, workspaceErrorResponse } from "@/lib/workspace"
 
 export async function GET(request: NextRequest) {
@@ -91,6 +92,15 @@ export async function POST(request: NextRequest) {
           : { decrement: parsedAmount }
       },
       select: { budget: true }
+    })
+
+    await recordActivity({
+      workspaceId: ctx.workspace.id,
+      type: ACTIVITY_TYPES.TRANSACTION_CREATED,
+      title: type === 'income' ? `Revenu — ${name}` : `Dépense — ${name}`,
+      description: `${parsedAmount.toFixed(2)} €`,
+      actorId: ctx.userId,
+      metadata: { transactionId: transaction.id, type, amount: parsedAmount },
     })
 
     return NextResponse.json({

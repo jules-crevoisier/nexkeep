@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { FileDown, PieChart } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,11 +14,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { downloadBudgetPreviewPdf } from "@/lib/orga-budget-pdf";
 import { CollapsibleSection } from "./collapsible-section";
 import type { Project, TaskGroup } from "./task-types";
 
 interface ProjectBudgetPreviewProps {
+  projectId: string;
   project: Pick<
     Project,
     "name" | "description" | "status" | "endDate" | "budget" | "color"
@@ -36,6 +37,7 @@ const pct = (part: number, total: number) =>
   total > 0 ? `${((part / total) * 100).toFixed(1)} %` : "—";
 
 export function ProjectBudgetPreview({
+  projectId,
   project,
   groups,
 }: ProjectBudgetPreviewProps) {
@@ -48,28 +50,35 @@ export function ProjectBudgetPreview({
   const hasBudgetData =
     projectBudget != null || groups.some((g) => g.budget != null);
 
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      downloadBudgetPreviewPdf({
-        project: {
-          name: project.name,
-          description: project.description,
-          status: project.status,
-          endDate: project.endDate,
-          budget: project.budget,
-          color: project.color,
-        },
-        groups: groups.map((g) => ({
-          name: g.name,
-          budget: g.budget,
-          color: g.color,
-        })),
-      });
+      const res = await fetch(`/api/orga/projects/${projectId}/budget-pdf`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error ?? "Export impossible");
+      }
+      const blob = await res.blob();
+      if (blob.size < 100) throw new Error("PDF vide");
+
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? `budget-prev-${project.name}.pdf`;
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF telecharge");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Export impossible";
+      toast.error(message);
     } finally {
       setExporting(false);
     }
-  }, [project, groups]);
+  }, [projectId, project.name]);
 
   if (!hasBudgetData) return null;
 

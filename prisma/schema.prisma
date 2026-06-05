@@ -57,8 +57,38 @@ model Workspace {
   projects              Project[]
   statuses              Status[]
   tasks                 Task[]
+  activityEvents        ActivityEvent[]
 
   @@map("workspaces")
+}
+
+// Journal d'activité transversal (invitations, remboursements, tâches…)
+model ActivityEvent {
+  id          String   @id @default(cuid())
+  type        String
+  title       String
+  description String?
+  metadata    Json?
+  actorEmail  String?
+  createdAt   DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  actorId String?
+
+  @@index([workspaceId, createdAt])
+  @@map("activity_events")
+}
+
+// Compteur anti-spam (IP / email / token) pour endpoints publics
+model RateLimitEvent {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@map("rate_limit_events")
 }
 
 model WorkspaceMember {

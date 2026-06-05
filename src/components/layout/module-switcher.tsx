@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wallet, CheckSquare, type LucideIcon } from "lucide-react";
+import { Wallet, CheckSquare, Activity, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/providers/workspace-provider";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -19,6 +19,7 @@ interface GroupTool {
 const GROUP_TOOLS: GroupTool[] = [
   { name: "Trésorerie", segment: "tresorerie", href: "/tresorerie", icon: Wallet },
   { name: "Organisation", segment: "orga", href: "/orga", icon: CheckSquare },
+  { name: "Activité", segment: "activite", href: "/activite", icon: Activity },
 ];
 
 export function ModuleSwitcher() {
