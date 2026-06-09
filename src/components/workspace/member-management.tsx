@@ -265,9 +265,11 @@ export function MemberManagement() {
           </div>
           <p className="text-xs text-muted-foreground">
             <span className="font-medium text-foreground">Rôle</span> = droits d&apos;édition
-            globaux. <span className="font-medium text-foreground">Trésorerie</span> = accès
-            financier. <span className="font-medium text-foreground">Icône dossier</span> =
-            projets visibles et tâches courantes (sans projet).
+            globaux, y compris l&apos;<span className="font-medium text-foreground">Inventaire</span>{" "}
+            (lecteur = lecture seule ; membre et + = ajouter, modifier, supprimer, importer).{" "}
+            <span className="font-medium text-foreground">Trésorerie</span> = accès financier.{" "}
+            <span className="font-medium text-foreground">Icône dossier</span> = projets visibles
+            et tâches courantes (sans projet).
           </p>
         </CardContent>
       </Card>
