@@ -58,6 +58,10 @@ import {
   Upload,
   CalendarClock,
   ClipboardCheck,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  X,
 } from "lucide-react"
 
 interface InventoryItem {
@@ -186,6 +190,12 @@ export default function InventairePage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  // Tri du tableau. "default" = stock bas en haut puis ordre alphabétique.
+  const [sort, setSort] = useState<{
+    key: "default" | "name" | "category" | "quantity"
+    dir: "asc" | "desc"
+  }>({ key: "default", dir: "asc" })
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<InventoryItem | null>(null)
@@ -244,6 +254,11 @@ export default function InventairePage() {
     const q = search.trim().toLowerCase()
     const list = items.filter((i) => {
       if (categoryFilter !== "all" && i.category !== categoryFilter) return false
+      // Filtre par statut
+      if (statusFilter === "low" && !isLow(i)) return false
+      if (statusFilter === "expiring" && expiryStatus(i.expiryDate) === null) return false
+      if (statusFilter === "active" && !i.isActive) return false
+      if (statusFilter === "archived" && i.isActive) return false
       if (!q) return true
       return (
         i.name.toLowerCase().includes(q) ||
@@ -251,14 +266,55 @@ export default function InventairePage() {
         (i.location ?? "").toLowerCase().includes(q)
       )
     })
-    // Les articles en stock bas remontent en haut du tableau.
+
+    const dir = sort.dir === "asc" ? 1 : -1
     return list.sort((a, b) => {
-      const la = isLow(a) ? 0 : 1
-      const lb = isLow(b) ? 0 : 1
-      if (la !== lb) return la - lb
-      return a.name.localeCompare(b.name, "fr")
+      switch (sort.key) {
+        case "name":
+          return dir * a.name.localeCompare(b.name, "fr")
+        case "category":
+          return dir * (a.category ?? "").localeCompare(b.category ?? "", "fr")
+        case "quantity":
+          return dir * (a.quantity - b.quantity)
+        default: {
+          // Tri par défaut : stock bas en haut, puis ordre alphabétique.
+          const la = isLow(a) ? 0 : 1
+          const lb = isLow(b) ? 0 : 1
+          if (la !== lb) return la - lb
+          return a.name.localeCompare(b.name, "fr")
+        }
+      }
     })
-  }, [items, search, categoryFilter])
+  }, [items, search, categoryFilter, statusFilter, sort])
+
+  // Bascule le tri sur une colonne : 1er clic = asc, 2e = desc, 3e = défaut.
+  const toggleSort = (key: "name" | "category" | "quantity") => {
+    setSort((s) => {
+      if (s.key !== key) return { key, dir: "asc" }
+      if (s.dir === "asc") return { key, dir: "desc" }
+      return { key: "default", dir: "asc" }
+    })
+  }
+
+  // Icône de tri affichée dans l'en-tête de colonne.
+  const sortIcon = (key: "name" | "category" | "quantity") => {
+    if (sort.key !== key) return <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+    return sort.dir === "asc" ? (
+      <ArrowUp className="h-3.5 w-3.5" />
+    ) : (
+      <ArrowDown className="h-3.5 w-3.5" />
+    )
+  }
+
+  const hasActiveFilters =
+    search.trim() !== "" || categoryFilter !== "all" || statusFilter !== "all" || sort.key !== "default"
+
+  const resetFilters = () => {
+    setSearch("")
+    setCategoryFilter("all")
+    setStatusFilter("all")
+    setSort({ key: "default", dir: "asc" })
+  }
 
   const stats = useMemo(() => {
     const totalValue = items.reduce((s, i) => s + (i.unitValue ?? 0) * i.quantity, 0)
@@ -700,7 +756,7 @@ export default function InventairePage() {
                 />
               </div>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Catégorie" />
                 </SelectTrigger>
                 <SelectContent>
@@ -712,6 +768,24 @@ export default function InventairePage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Statut" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les statuts</SelectItem>
+                  <SelectItem value="low">Stock bas</SelectItem>
+                  <SelectItem value="expiring">Péremption proche</SelectItem>
+                  <SelectItem value="active">Actifs</SelectItem>
+                  <SelectItem value="archived">Archivés</SelectItem>
+                </SelectContent>
+              </Select>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={resetFilters}>
+                  <X className="mr-1 h-4 w-4" />
+                  Réinitialiser
+                </Button>
+              )}
             </div>
 
             {/* Liste */}
@@ -735,18 +809,56 @@ export default function InventairePage() {
                     ))}
                   </div>
                 ) : filtered.length === 0 ? (
-                  <EmptyState
-                    icon={Package}
-                    title="Aucun article"
-                    description="Commencez par référencer le matériel et les consommables du BDE."
-                  />
+                  items.length === 0 ? (
+                    <EmptyState
+                      icon={Package}
+                      title="Aucun article"
+                      description="Commencez par référencer le matériel et les consommables du BDE."
+                    />
+                  ) : (
+                    <EmptyState
+                      icon={Search}
+                      title="Aucun résultat"
+                      description="Aucun article ne correspond à ces filtres."
+                      action={
+                        <Button variant="outline" size="sm" onClick={resetFilters}>
+                          <X className="mr-1 h-4 w-4" />
+                          Réinitialiser les filtres
+                        </Button>
+                      }
+                    />
+                  )
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Article</TableHead>
-                        <TableHead>Catégorie</TableHead>
-                        <TableHead className="text-right">Stock</TableHead>
+                        <TableHead>
+                          <button
+                            type="button"
+                            onClick={() => toggleSort("name")}
+                            className="flex items-center gap-1 font-medium hover:text-foreground"
+                          >
+                            Article {sortIcon("name")}
+                          </button>
+                        </TableHead>
+                        <TableHead>
+                          <button
+                            type="button"
+                            onClick={() => toggleSort("category")}
+                            className="flex items-center gap-1 font-medium hover:text-foreground"
+                          >
+                            Catégorie {sortIcon("category")}
+                          </button>
+                        </TableHead>
+                        <TableHead className="text-right">
+                          <button
+                            type="button"
+                            onClick={() => toggleSort("quantity")}
+                            className="ml-auto flex items-center gap-1 font-medium hover:text-foreground"
+                          >
+                            Stock {sortIcon("quantity")}
+                          </button>
+                        </TableHead>
                         <TableHead>État</TableHead>
                         {canEditOrga && <TableHead className="text-right">Actions</TableHead>}
                       </TableRow>
