@@ -27,8 +27,7 @@ import {
   FileText,
   Wallet,
   Landmark,
-  Search,
-  Package
+  Search
 } from "lucide-react";
 
 const navigation = [
@@ -56,11 +55,6 @@ const navigation = [
     name: "Facturation",
     href: "/tresorerie/facturation",
     icon: FileText,
-  },
-  {
-    name: "Inventaire",
-    href: "/tresorerie/inventaire",
-    icon: Package,
   },
   {
     name: "Historique",

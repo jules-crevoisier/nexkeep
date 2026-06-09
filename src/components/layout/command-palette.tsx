@@ -12,7 +12,6 @@ import {
   FileText,
   Wallet,
   Search,
-  Package,
   type LucideIcon,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -32,7 +31,6 @@ const ROUTES: CommandRoute[] = [
   { name: "Remboursements", href: "/tresorerie/reimbursements", icon: CreditCard, keywords: "remboursement demande" },
   { name: "Liquide", href: "/tresorerie/liquide", icon: Wallet, keywords: "caisse especes cash" },
   { name: "Facturation", href: "/tresorerie/facturation", icon: FileText, keywords: "factures clients articles" },
-  { name: "Inventaire", href: "/tresorerie/inventaire", icon: Package, keywords: "stock materiel inventaire" },
   { name: "Historique", href: "/tresorerie/history", icon: History, keywords: "transactions export" },
   { name: "Rapports", href: "/tresorerie/reports", icon: BarChart3, keywords: "graphiques statistiques analyse" },
   { name: "Paramètres", href: "/parametres", icon: Settings, keywords: "profil theme securite" },

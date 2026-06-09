@@ -9,12 +9,11 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useGuardedAction } from '@/hooks/use-guarded-action'
 import { GuardedActionDialog } from '@/components/permissions/guarded-action-dialog'
 import { RestrictedButton } from '@/components/permissions/restricted-button'
-import { ReaderModeBanner } from '@/components/permissions/reader-mode-banner'
 import { ReimbursementRequestForm } from '@/components/forms/reimbursement-request-form'
 import { ReimbursementList } from '@/components/reimbursements/reimbursement-list'
 import { ReimbursementPaymentForm } from '@/components/reimbursements/reimbursement-payment-form'
 import { ShareButton } from '@/components/reimbursements/share-button'
-import { Sidebar } from '@/components/layout/sidebar'
+import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { Plus, CreditCard, FileText, TrendingUp } from 'lucide-react'
 
@@ -105,10 +104,8 @@ export default function ReimbursementsPage() {
 
   return (
     <AuthGuard>
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <div className="flex-1 p-6 space-y-6">
-      <ReaderModeBanner mode="treasury" />
+      <DashboardLayout>
+        <div className="space-y-6">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -267,7 +264,7 @@ export default function ReimbursementsPage() {
         message={treasuryGuard.deniedMessage}
       />
         </div>
-      </div>
+      </DashboardLayout>
     </AuthGuard>
   )
 }

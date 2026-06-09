@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireTreasury, workspaceErrorResponse } from "@/lib/workspace"
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace"
 import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
 
 // Champs texte bornés pour éviter les abus / payloads géants
@@ -15,7 +15,7 @@ const CONDITIONS = ["new", "good", "worn", "broken"]
 // GET /api/inventory — liste de l'inventaire de l'organisation active
 export async function GET() {
   try {
-    const ctx = await requireTreasury("READ")
+    const ctx = await requireWorkspace()
     const items = await prisma.inventoryItem.findMany({
       where: { workspaceId: ctx.workspace.id },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -29,7 +29,7 @@ export async function GET() {
 // POST /api/inventory — créer un article d'inventaire
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireTreasury("WRITE")
+    const ctx = await requireRole("MEMBER")
     const body = await request.json()
 
     const name = trimOrNull(body.name, 200)

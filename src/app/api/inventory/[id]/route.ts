@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireTreasury, workspaceErrorResponse } from "@/lib/workspace"
+import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace"
 
 const trimOrNull = (v: unknown, max = 500): string | null => {
   if (typeof v !== "string") return null
@@ -17,7 +17,7 @@ export async function GET(
 ) {
   const { id } = await params
   try {
-    const ctx = await requireTreasury("READ")
+    const ctx = await requireWorkspace()
     const item = await prisma.inventoryItem.findFirst({
       where: { id, workspaceId: ctx.workspace.id },
       include: { movements: { orderBy: { createdAt: "desc" }, take: 100 } },
@@ -36,7 +36,7 @@ export async function PATCH(
 ) {
   const { id } = await params
   try {
-    const ctx = await requireTreasury("WRITE")
+    const ctx = await requireRole("MEMBER")
     const existing = await prisma.inventoryItem.findFirst({
       where: { id, workspaceId: ctx.workspace.id },
     })
@@ -89,7 +89,7 @@ export async function DELETE(
 ) {
   const { id } = await params
   try {
-    const ctx = await requireTreasury("WRITE")
+    const ctx = await requireRole("MEMBER")
     const existing = await prisma.inventoryItem.findFirst({
       where: { id, workspaceId: ctx.workspace.id },
     })

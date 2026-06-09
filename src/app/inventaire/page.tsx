@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
+import { ModuleSwitcher } from "@/components/layout/module-switcher"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { RestrictedButton } from "@/components/permissions/restricted-button"
 import { GuardedActionDialog } from "@/components/permissions/guarded-action-dialog"
@@ -45,6 +45,7 @@ import {
   Boxes,
   Euro,
   Search,
+  Eye,
 } from "lucide-react"
 
 interface InventoryItem {
@@ -100,8 +101,11 @@ const emptyForm = {
 }
 
 export default function InventairePage() {
-  const { canWriteTreasury, treasuryDeniedMessage } = usePermissions()
-  const guard = useGuardedAction(canWriteTreasury, treasuryDeniedMessage)
+  // L'inventaire est un module à part, gouverné par le rôle dans l'organisation :
+  // tout membre peut consulter, les membres (et plus) peuvent modifier, le lecteur
+  // est en lecture seule.
+  const { canEditOrga, isViewer, orgaDeniedMessage } = usePermissions()
+  const guard = useGuardedAction(canEditOrga, orgaDeniedMessage)
 
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -274,194 +278,207 @@ export default function InventairePage() {
 
   return (
     <AuthGuard>
-      <DashboardLayout>
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-3xl font-bold">Inventaire</h1>
-              <p className="text-muted-foreground">
-                Gérez le stock de matériel et de consommables du BDE
-              </p>
+      <div className="min-h-screen bg-background">
+        <ModuleSwitcher />
+        <main className="mx-auto max-w-6xl px-4 py-8">
+          <div className="space-y-6">
+            {/* Bandeau lecture seule */}
+            {isViewer && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                <Eye className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>Inventaire en lecture seule — {orgaDeniedMessage}</p>
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-3xl font-bold">Inventaire</h1>
+                <p className="text-muted-foreground">
+                  Gérez le stock de matériel et de consommables du BDE
+                </p>
+              </div>
+              <RestrictedButton
+                allowed={canEditOrga}
+                deniedMessage={orgaDeniedMessage}
+                onClick={openCreate}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nouvel article
+              </RestrictedButton>
             </div>
-            <RestrictedButton
-              allowed={canWriteTreasury}
-              deniedMessage={treasuryDeniedMessage}
-              onClick={openCreate}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nouvel article
-            </RestrictedButton>
-          </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Articles référencés</CardTitle>
-                <Boxes className="h-4 w-4 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{loading ? "-" : stats.count}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Valeur du stock</CardTitle>
-                <Euro className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {loading ? "-" : formatEuro(stats.totalValue)}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className={stats.lowStock > 0 ? "border-amber-500/40" : undefined}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Alertes stock bas</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${stats.lowStock > 0 ? "text-amber-600" : ""}`}>
-                  {loading ? "-" : stats.lowStock}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Filtres */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher (nom, référence, lieu)…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+            {/* Stats */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Articles référencés</CardTitle>
+                  <Boxes className="h-4 w-4 text-blue-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{loading ? "-" : stats.count}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Valeur du stock</CardTitle>
+                  <Euro className="h-4 w-4 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {loading ? "-" : formatEuro(stats.totalValue)}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className={stats.lowStock > 0 ? "border-amber-500/40" : undefined}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Alertes stock bas</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${stats.lowStock > 0 ? "text-amber-600" : ""}`}>
+                    {loading ? "-" : stats.lowStock}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Catégorie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes les catégories</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
-          {/* Liste */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Articles en stock</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-16 w-full" />
-                  ))}
-                </div>
-              ) : filtered.length === 0 ? (
-                <EmptyState
-                  icon={Package}
-                  title="Aucun article"
-                  description="Commencez par référencer le matériel et les consommables du BDE."
+            {/* Filtres */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher (nom, référence, lieu)…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
                 />
-              ) : (
-                <div className="divide-y">
-                  {filtered.map((item) => {
-                    const low = item.minQuantity != null && item.quantity <= item.minQuantity
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex flex-wrap items-center justify-between gap-3 py-3"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium">{item.name}</p>
-                            {item.category && (
-                              <Badge variant="secondary">{item.category}</Badge>
-                            )}
-                            {item.condition && CONDITION_LABELS[item.condition] && (
-                              <Badge variant="outline">{CONDITION_LABELS[item.condition]}</Badge>
-                            )}
-                            {low && (
-                              <Badge variant="destructive">
-                                <AlertTriangle className="h-3 w-3" /> Stock bas
-                              </Badge>
-                            )}
-                            {!item.isActive && <Badge variant="outline">Archivé</Badge>}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {[
-                              item.reference ? `Réf. ${item.reference}` : null,
-                              item.location ? `📍 ${item.location}` : null,
-                              item.unitValue != null ? `${formatEuro(item.unitValue)}/${item.unit}` : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className={`text-lg font-bold ${low ? "text-amber-600" : ""}`}>
-                              {item.quantity} <span className="text-sm font-normal">{item.unit}</span>
+              </div>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Catégorie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les catégories</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Liste */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Articles en stock</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <EmptyState
+                    icon={Package}
+                    title="Aucun article"
+                    description="Commencez par référencer le matériel et les consommables du BDE."
+                  />
+                ) : (
+                  <div className="divide-y">
+                    {filtered.map((item) => {
+                      const low = item.minQuantity != null && item.quantity <= item.minQuantity
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex flex-wrap items-center justify-between gap-3 py-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium">{item.name}</p>
+                              {item.category && (
+                                <Badge variant="secondary">{item.category}</Badge>
+                              )}
+                              {item.condition && CONDITION_LABELS[item.condition] && (
+                                <Badge variant="outline">{CONDITION_LABELS[item.condition]}</Badge>
+                              )}
+                              {low && (
+                                <Badge variant="destructive">
+                                  <AlertTriangle className="h-3 w-3" /> Stock bas
+                                </Badge>
+                              )}
+                              {!item.isActive && <Badge variant="outline">Archivé</Badge>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {[
+                                item.reference ? `Réf. ${item.reference}` : null,
+                                item.location ? `📍 ${item.location}` : null,
+                                item.unitValue != null ? `${formatEuro(item.unitValue)}/${item.unit}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </p>
-                            {item.minQuantity != null && (
-                              <p className="text-xs text-muted-foreground">
-                                seuil&nbsp;: {item.minQuantity}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className={`text-lg font-bold ${low ? "text-amber-600" : ""}`}>
+                                {item.quantity} <span className="text-sm font-normal">{item.unit}</span>
                               </p>
+                              {item.minQuantity != null && (
+                                <p className="text-xs text-muted-foreground">
+                                  seuil&nbsp;: {item.minQuantity}
+                                </p>
+                              )}
+                            </div>
+                            {canEditOrga && (
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Entrée de stock"
+                                  onClick={() => openMovement(item, "in")}
+                                >
+                                  <ArrowDownToLine className="h-4 w-4 text-green-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Sortie de stock"
+                                  onClick={() => openMovement(item, "out")}
+                                >
+                                  <ArrowUpFromLine className="h-4 w-4 text-red-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Modifier"
+                                  onClick={() => openEdit(item)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Supprimer"
+                                  onClick={guard.run(() => setDeleteItem(item))}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
                             )}
                           </div>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Entrée de stock"
-                              onClick={() => openMovement(item, "in")}
-                            >
-                              <ArrowDownToLine className="h-4 w-4 text-green-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Sortie de stock"
-                              onClick={() => openMovement(item, "out")}
-                            >
-                              <ArrowUpFromLine className="h-4 w-4 text-red-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Modifier"
-                              onClick={() => openEdit(item)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Supprimer"
-                              onClick={guard.run(() => setDeleteItem(item))}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </main>
 
         {/* Dialog création / édition */}
         <Dialog open={formOpen} onOpenChange={setFormOpen}>
@@ -668,7 +685,7 @@ export default function InventairePage() {
           onOpenChange={guard.setDeniedOpen}
           message={guard.deniedMessage}
         />
-      </DashboardLayout>
+      </div>
     </AuthGuard>
   )
 }

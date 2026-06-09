@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireTreasury, workspaceErrorResponse } from "@/lib/workspace"
+import { requireRole, workspaceErrorResponse } from "@/lib/workspace"
 import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
 
 const trimOrNull = (v: unknown, max = 500): string | null => {
@@ -18,7 +18,7 @@ export async function POST(
 ) {
   const { id } = await params
   try {
-    const ctx = await requireTreasury("WRITE")
+    const ctx = await requireRole("MEMBER")
     const item = await prisma.inventoryItem.findFirst({
       where: { id, workspaceId: ctx.workspace.id },
     })
