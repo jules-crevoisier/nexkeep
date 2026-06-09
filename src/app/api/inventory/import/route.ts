@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
 import { requireRole, workspaceErrorResponse } from "@/lib/workspace"
 import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
@@ -27,7 +28,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalisation + validation côté serveur (on ignore les lignes sans nom)
+    // Normalisation + validation côté serveur (on ignore les lignes sans nom).
+    // On génère l'id côté serveur pour pouvoir relier les mouvements en un seul
+    // createMany (sinon createMany ne renvoie pas les ids en PostgreSQL).
     const prepared = rawItems
       .map((r: Record<string, unknown>) => {
         const name = trimOrNull(r.name, 200)
@@ -35,6 +38,7 @@ export async function POST(request: NextRequest) {
         const qty = Number(r.quantity)
         const quantity = Number.isFinite(qty) && qty >= 0 && qty <= 1_000_000_000 ? qty : 0
         return {
+          id: randomUUID(),
           name,
           category: trimOrNull(r.category, 100),
           reference: trimOrNull(r.reference, 100),
@@ -56,38 +60,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Création en une transaction : articles + mouvement d'entrée initial
-    const created = await prisma.$transaction(async (tx) => {
-      const items = []
-      for (const data of prepared) {
-        const item = await tx.inventoryItem.create({ data })
-        if (item.quantity > 0) {
-          await tx.inventoryMovement.create({
-            data: {
-              type: "in",
-              quantity: item.quantity,
-              reason: "Import Excel",
-              itemId: item.id,
-              workspaceId: ctx.workspace.id,
-              userId: ctx.userId,
-            },
-          })
-        }
-        items.push(item)
-      }
-      return items
-    })
+    // Mouvements d'entrée initiaux (uniquement pour les articles avec stock)
+    const movements = prepared
+      .filter((p) => p.quantity > 0)
+      .map((p) => ({
+        type: "in",
+        quantity: p.quantity,
+        reason: "Import Excel",
+        itemId: p.id,
+        workspaceId: ctx.workspace.id,
+        userId: ctx.userId,
+      }))
+
+    // Deux createMany groupés (rapides et compatibles avec un pooler de connexions)
+    await prisma.$transaction([
+      prisma.inventoryItem.createMany({ data: prepared }),
+      ...(movements.length
+        ? [prisma.inventoryMovement.createMany({ data: movements })]
+        : []),
+    ])
 
     await recordActivity({
       workspaceId: ctx.workspace.id,
       type: ACTIVITY_TYPES.INVENTORY_ITEM_CREATED,
       title: "Import d'inventaire",
-      description: `${created.length} article(s) importé(s) depuis un fichier Excel`,
+      description: `${prepared.length} article(s) importé(s) depuis un fichier Excel`,
       actorId: ctx.userId,
-      metadata: { count: created.length },
+      metadata: { count: prepared.length },
     })
 
-    return NextResponse.json({ imported: created.length })
+    return NextResponse.json({ imported: prepared.length })
   } catch (error) {
     return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
