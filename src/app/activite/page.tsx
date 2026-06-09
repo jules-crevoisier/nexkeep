@@ -37,6 +37,9 @@ const TYPE_META: Record<
   transaction_created: { icon: TrendingUp, color: "text-violet-600" },
   project_created: { icon: FolderKanban, color: "text-indigo-600" },
   task_completed: { icon: ListTodo, color: "text-sky-600" },
+  initial_balance_updated: { icon: CreditCard, color: "text-amber-600" },
+  inventory_item_created: { icon: ListTodo, color: "text-teal-600" },
+  inventory_movement: { icon: TrendingUp, color: "text-teal-600" },
 };
 
 function ActivityFeed() {

@@ -69,6 +69,8 @@ model Workspace {
   statuses              Status[]
   tasks                 Task[]
   activityEvents        ActivityEvent[]
+  inventoryItems        InventoryItem[]
+  inventoryMovements    InventoryMovement[]
 
   @@map("workspaces")
 }
@@ -167,6 +169,8 @@ model User {
   tasks Task[]
   statuses Status[]
   memberships WorkspaceMember[]
+  inventoryItems InventoryItem[]
+  inventoryMovements InventoryMovement[]
 
   @@map("users")
 }
@@ -517,4 +521,57 @@ model TaskAssignee {
 
   @@id([taskId, memberId])
   @@map("task_assignees")
+}
+
+// Module Inventaire : stock matériel / consommables d'une association (BDE)
+model InventoryItem {
+  id          String   @id @default(cuid())
+  name        String   // Nom de l'article
+  description String?  // Description / détails
+  category    String?  // Catégorie (Boissons, Matériel, Goodies, Déco, Son/Lumière…)
+  reference   String?  // Référence / code interne (SKU)
+  quantity    Float    @default(0) // Quantité actuelle en stock
+  unit        String   @default("unité") // Unité (pièce, carton, L, kg…)
+  minQuantity Float?   // Seuil d'alerte de réapprovisionnement
+  unitValue   Float?   // Valeur unitaire estimée (€)
+  location    String?  // Lieu de stockage (local, armoire, caisse…)
+  condition   String?  // État : "new", "good", "worn", "broken"
+  photoUrl    String?  // Photo de l'article
+  isActive    Boolean  @default(true) // Article archivé ou non
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  movements InventoryMovement[]
+
+  @@index([workspaceId])
+  @@map("inventory_items")
+}
+
+// Mouvement de stock (traçabilité : entrée, sortie, ajustement d'inventaire)
+model InventoryMovement {
+  id        String   @id @default(cuid())
+  type      String   // "in" (entrée), "out" (sortie), "adjust" (correction inventaire)
+  quantity  Float    // Quantité du mouvement (toujours positive)
+  reason    String?  // Motif (achat, perte, prêt, événement, casse…)
+  note      String?  // Commentaire libre
+  createdAt DateTime @default(now())
+
+  itemId String
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([itemId])
+  @@map("inventory_movements")
 }

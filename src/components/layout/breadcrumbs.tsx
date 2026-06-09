@@ -19,6 +19,7 @@ const LABELS: Record<string, string> = {
   reimbursements: "Remboursements",
   liquide: "Liquide",
   facturation: "Facturation",
+  inventaire: "Inventaire",
   history: "Historique",
   reports: "Rapports",
   settings: "Paramètres",

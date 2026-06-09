@@ -52,7 +52,10 @@ function OrganisationTab() {
   const isAdmin = active?.role === "ADMIN" || active?.role === "OWNER";
   const isOwner = active?.role === "OWNER";
   const canReadTreasury = active?.treasuryAccess !== "NONE";
+  // Paramètre critique : seuls les admins/propriétaires avec accès écriture
+  // peuvent modifier les soldes de départ (recalcul de toute la trésorerie).
   const canWriteTreasury = active?.treasuryAccess === "WRITE";
+  const canEditBalances = canWriteTreasury && isAdmin;
 
   const [name, setName] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -189,7 +192,12 @@ function OrganisationTab() {
       {canReadTreasury && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Soldes de départ</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              Soldes de départ
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+                <AlertTriangle className="h-3 w-3" /> Critique
+              </span>
+            </CardTitle>
             <CardDescription>
               Solde initial en banque et en caisse, base des calculs de trésorerie
             </CardDescription>
@@ -205,7 +213,7 @@ function OrganisationTab() {
                   step="0.01"
                   value={bank}
                   onChange={(e) => setBank(e.target.value)}
-                  disabled={!canWriteTreasury}
+                  disabled={!canEditBalances}
                 />
               </div>
               <div className="space-y-2">
@@ -217,17 +225,43 @@ function OrganisationTab() {
                   step="0.01"
                   value={cash}
                   onChange={(e) => setCash(e.target.value)}
-                  disabled={!canWriteTreasury}
+                  disabled={!canEditBalances}
                 />
               </div>
             </div>
-            {canWriteTreasury ? (
-              <Button onClick={saveBudget} disabled={savingBudget}>
-                {savingBudget ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer les soldes"}
-              </Button>
-            ) : (
+            {canEditBalances ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button disabled={savingBudget}>
+                    {savingBudget ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer les soldes"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-amber-600" />
+                      Modifier les soldes de départ ?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Ces valeurs servent de base à <strong>tous</strong> les calculs de trésorerie
+                      (banque {Number(bank || 0).toFixed(2)} € · liquide {Number(cash || 0).toFixed(2)} €).
+                      Toute modification recalcule l&apos;ensemble des soldes affichés et sera
+                      enregistrée dans le journal d&apos;activité. Continuer ?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                    <AlertDialogAction onClick={saveBudget}>Confirmer</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : !canWriteTreasury ? (
               <p className="text-xs text-muted-foreground">
                 Vous avez un accès en lecture seule à la trésorerie.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Seuls les administrateurs peuvent modifier les soldes de départ.
               </p>
             )}
           </CardContent>

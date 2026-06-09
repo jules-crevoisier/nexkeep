@@ -8,6 +8,9 @@ export const ACTIVITY_TYPES = {
   TRANSACTION_CREATED: 'transaction_created',
   PROJECT_CREATED: 'project_created',
   TASK_COMPLETED: 'task_completed',
+  INITIAL_BALANCE_UPDATED: 'initial_balance_updated',
+  INVENTORY_ITEM_CREATED: 'inventory_item_created',
+  INVENTORY_MOVEMENT: 'inventory_movement',
 } as const
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[keyof typeof ACTIVITY_TYPES]
