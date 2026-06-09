@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import * as XLSX from "xlsx"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
@@ -46,6 +47,9 @@ import {
   Euro,
   Search,
   Eye,
+  Download,
+  Upload,
+  CalendarClock,
 } from "lucide-react"
 
 interface InventoryItem {
@@ -60,7 +64,18 @@ interface InventoryItem {
   unitValue?: number | null
   location?: string | null
   condition?: string | null
+  expiryDate?: string | null
   isActive: boolean
+}
+
+interface ParsedRow {
+  name: string
+  category: string
+  description: string
+  quantity: number
+  unit: string
+  location: string
+  expiryDate: unknown
 }
 
 // Catégories suggérées typiques d'un BDE (l'utilisateur peut en saisir d'autres)
@@ -97,7 +112,34 @@ const emptyForm = {
   unitValue: "",
   location: "",
   condition: "good",
+  expiryDate: "",
   description: "",
+}
+
+// Normalise un en-tête de colonne (minuscule, sans accent)
+const normalizeHeader = (s: unknown): string =>
+  String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+
+// Convertit une valeur de cellule date en chaîne yyyy-mm-dd pour <input type=date>
+const toDateInput = (v?: string | null): string => {
+  if (!v) return ""
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0]
+}
+
+// Statut de péremption : "expired", "soon" (< 30 jours) ou null
+const expiryStatus = (v?: string | null): "expired" | "soon" | null => {
+  if (!v) return null
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return null
+  const days = (d.getTime() - Date.now()) / 86400000
+  if (days < 0) return "expired"
+  if (days <= 30) return "soon"
+  return null
 }
 
 export default function InventairePage() {
@@ -123,6 +165,10 @@ export default function InventairePage() {
   const [moveReason, setMoveReason] = useState("")
 
   const [deleteItem, setDeleteItem] = useState<InventoryItem | null>(null)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [pendingImport, setPendingImport] = useState<ParsedRow[] | null>(null)
+  const [importing, setImporting] = useState(false)
 
   const fetchItems = useCallback(async () => {
     try {
@@ -166,6 +212,203 @@ export default function InventairePage() {
     return { count: items.length, totalValue, lowStock }
   }, [items])
 
+  const exportToXLSX = () => {
+    // On exporte la liste filtrée affichée (recherche + catégorie)
+    const rows = [...filtered].sort((a, b) => a.name.localeCompare(b.name, "fr"))
+
+    const headers = [
+      "Nom",
+      "Catégorie",
+      "Référence",
+      "Quantité",
+      "Unité",
+      "Seuil d'alerte",
+      "Valeur unitaire (€)",
+      "Valeur totale (€)",
+      "Lieu de stockage",
+      "Date de péremption",
+      "État",
+      "Statut",
+      "Alerte stock",
+      "Description",
+    ]
+
+    const data = rows.map((i) => [
+      i.name,
+      i.category ?? "",
+      i.reference ?? "",
+      i.quantity,
+      i.unit,
+      i.minQuantity ?? "",
+      i.unitValue ?? "",
+      i.unitValue != null ? parseFloat((i.unitValue * i.quantity).toFixed(2)) : "",
+      i.location ?? "",
+      i.expiryDate ? new Date(i.expiryDate).toLocaleDateString("fr-FR") : "",
+      i.condition ? CONDITION_LABELS[i.condition] ?? i.condition : "",
+      i.isActive ? "Actif" : "Archivé",
+      i.minQuantity != null && i.quantity <= i.minQuantity ? "STOCK BAS" : "",
+      i.description ?? "",
+    ])
+
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data])
+    worksheet["!cols"] = [
+      { wch: 26 }, // Nom
+      { wch: 18 }, // Catégorie
+      { wch: 14 }, // Référence
+      { wch: 10 }, // Quantité
+      { wch: 10 }, // Unité
+      { wch: 13 }, // Seuil
+      { wch: 16 }, // Valeur unitaire
+      { wch: 16 }, // Valeur totale
+      { wch: 20 }, // Lieu
+      { wch: 16 }, // Date de péremption
+      { wch: 12 }, // État
+      { wch: 10 }, // Statut
+      { wch: 12 }, // Alerte
+      { wch: 35 }, // Description
+    ]
+
+    // En-tête en gras sur fond bleu (même DA que l'export Historique)
+    const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c: col })
+      if (!worksheet[addr]) continue
+      worksheet[addr].s = {
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "3B82F6" } },
+        alignment: { horizontal: "center" },
+      }
+    }
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Inventaire")
+
+    // Feuille Résumé (global + répartition par catégorie)
+    const byCategory = new Map<string, { count: number; value: number }>()
+    for (const i of rows) {
+      const key = i.category || "Sans catégorie"
+      const entry = byCategory.get(key) ?? { count: 0, value: 0 }
+      entry.count += 1
+      entry.value += (i.unitValue ?? 0) * i.quantity
+      byCategory.set(key, entry)
+    }
+
+    const summaryData: (string | number)[][] = [
+      ["Résumé de l'inventaire"],
+      ["", ""],
+      ["Articles référencés", rows.length],
+      ["Valeur totale du stock (€)", parseFloat(stats.totalValue.toFixed(2))],
+      ["Articles en alerte stock bas", stats.lowStock],
+      ["Date d'export", new Date().toLocaleString("fr-FR")],
+      ["", ""],
+      ["Répartition par catégorie", ""],
+      ["Catégorie", "Articles", "Valeur (€)"],
+      ...Array.from(byCategory.entries())
+        .sort((a, b) => b[1].value - a[1].value)
+        .map(([cat, v]) => [cat, v.count, parseFloat(v.value.toFixed(2))]),
+    ]
+    const summary = XLSX.utils.aoa_to_sheet(summaryData)
+    summary["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 14 }]
+    if (summary["A1"]) {
+      summary["A1"].s = { font: { bold: true, size: 16 }, fill: { fgColor: { rgb: "E5E7EB" } } }
+    }
+    XLSX.utils.book_append_sheet(workbook, summary, "Résumé")
+
+    XLSX.writeFile(workbook, `inventaire-${new Date().toISOString().split("T")[0]}.xlsx`)
+  }
+
+  // Lit un fichier Excel et mappe les colonnes par nom d'en-tête (tolérant aux accents/casse).
+  // Compatible avec le modèle « Suivi de l'inventaire » : Catégorie, Nom de l'article,
+  // Description, Quantité, Unité, Date de péremption, Localisation dans le stock, Remarques.
+  const parseFile = async (file: File): Promise<ParsedRow[]> => {
+    const buf = await file.arrayBuffer()
+    const wb = XLSX.read(buf, { type: "array", cellDates: true })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const grid: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" })
+
+    // Trouver la ligne d'en-tête (celle qui contient une colonne « nom »)
+    const headerIdx = grid.findIndex((row) =>
+      row.some((c) => normalizeHeader(c).includes("nom"))
+    )
+    if (headerIdx === -1) return []
+
+    const headers = grid[headerIdx].map(normalizeHeader)
+    const colOf = (pred: (h: string) => boolean) => headers.findIndex(pred)
+    const idx = {
+      category: colOf((h) => h.includes("categor")),
+      name: colOf((h) => h.includes("nom")),
+      description: colOf((h) => h === "description" || h.includes("description")),
+      quantity: colOf((h) => h.includes("quantit")),
+      unit: colOf((h) => h === "unite" || h.startsWith("unite")),
+      expiry: colOf((h) => h.includes("peremp") || h.includes("perim")),
+      location: colOf((h) => h.includes("localisation") || h.includes("emplacement")),
+      remarks: colOf((h) => h.includes("remarque")),
+    }
+
+    const get = (row: unknown[], i: number) => (i >= 0 ? row[i] : "")
+
+    return grid
+      .slice(headerIdx + 1)
+      .map((row): ParsedRow | null => {
+        const name = String(get(row, idx.name) ?? "").trim()
+        if (!name) return null
+        const desc = String(get(row, idx.description) ?? "").trim()
+        const remarks = String(get(row, idx.remarks) ?? "").trim()
+        const quantity = Number(get(row, idx.quantity))
+        return {
+          name,
+          category: String(get(row, idx.category) ?? "").trim(),
+          description: [desc, remarks].filter(Boolean).join(" — "),
+          quantity: Number.isFinite(quantity) ? quantity : 0,
+          unit: String(get(row, idx.unit) ?? "").trim() || "unité",
+          location: String(get(row, idx.location) ?? "").trim(),
+          expiryDate: get(row, idx.expiry),
+        }
+      })
+      .filter((x): x is ParsedRow => x !== null)
+  }
+
+  const onFileChosen = guard.run(() => fileInputRef.current?.click())
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = "" // permet de re-sélectionner le même fichier
+    if (!file) return
+    try {
+      const parsed = await parseFile(file)
+      if (parsed.length === 0) {
+        toast.error("Aucun article détecté. Vérifiez la colonne « Nom de l'article ».")
+        return
+      }
+      setPendingImport(parsed)
+    } catch {
+      toast.error("Lecture du fichier impossible")
+    }
+  }
+
+  const confirmImport = async () => {
+    if (!pendingImport) return
+    setImporting(true)
+    try {
+      const res = await fetch("/api/inventory/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: pendingImport }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => null)
+        throw new Error(d?.error)
+      }
+      const d = await res.json()
+      toast.success(`${d.imported} article(s) importé(s)`)
+      setPendingImport(null)
+      fetchItems()
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Import impossible")
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const openCreate = guard.run(() => {
     setEditing(null)
     setForm(emptyForm)
@@ -185,6 +428,7 @@ export default function InventairePage() {
         unitValue: item.unitValue != null ? String(item.unitValue) : "",
         location: item.location ?? "",
         condition: item.condition ?? "good",
+        expiryDate: toDateInput(item.expiryDate),
         description: item.description ?? "",
       })
       setFormOpen(true)
@@ -206,6 +450,7 @@ export default function InventairePage() {
         unitValue: form.unitValue,
         location: form.location,
         condition: form.condition,
+        expiryDate: form.expiryDate || null,
         description: form.description,
         ...(editing ? {} : { quantity: form.quantity }),
       }
@@ -298,14 +543,37 @@ export default function InventairePage() {
                   Gérez le stock de matériel et de consommables du BDE
                 </p>
               </div>
-              <RestrictedButton
-                allowed={canEditOrga}
-                deniedMessage={orgaDeniedMessage}
-                onClick={openCreate}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Nouvel article
-              </RestrictedButton>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleFile}
+                />
+                {canEditOrga && (
+                  <Button variant="outline" onClick={onFileChosen}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Importer Excel
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={exportToXLSX}
+                  disabled={loading || items.length === 0}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Exporter Excel
+                </Button>
+                <RestrictedButton
+                  allowed={canEditOrga}
+                  deniedMessage={orgaDeniedMessage}
+                  onClick={openCreate}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouvel article
+                </RestrictedButton>
+              </div>
             </div>
 
             {/* Stats */}
@@ -410,6 +678,16 @@ export default function InventairePage() {
                                   <AlertTriangle className="h-3 w-3" /> Stock bas
                                 </Badge>
                               )}
+                              {expiryStatus(item.expiryDate) === "expired" && (
+                                <Badge variant="destructive">
+                                  <CalendarClock className="h-3 w-3" /> Périmé
+                                </Badge>
+                              )}
+                              {expiryStatus(item.expiryDate) === "soon" && (
+                                <Badge className="border-transparent bg-amber-500 text-white">
+                                  <CalendarClock className="h-3 w-3" /> Bientôt périmé
+                                </Badge>
+                              )}
                               {!item.isActive && <Badge variant="outline">Archivé</Badge>}
                             </div>
                             <p className="text-xs text-muted-foreground">
@@ -417,6 +695,9 @@ export default function InventairePage() {
                                 item.reference ? `Réf. ${item.reference}` : null,
                                 item.location ? `📍 ${item.location}` : null,
                                 item.unitValue != null ? `${formatEuro(item.unitValue)}/${item.unit}` : null,
+                                item.expiryDate
+                                  ? `Péremption : ${new Date(item.expiryDate).toLocaleDateString("fr-FR")}`
+                                  : null,
                               ]
                                 .filter(Boolean)
                                 .join(" · ")}
@@ -595,6 +876,15 @@ export default function InventairePage() {
                 </div>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="f-exp">Date de péremption</Label>
+                <Input
+                  id="f-exp"
+                  type="date"
+                  value={form.expiryDate}
+                  onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="f-desc">Description / notes</Label>
                 <Textarea
                   id="f-desc"
@@ -676,6 +966,26 @@ export default function InventairePage() {
             <AlertDialogFooter>
               <AlertDialogCancel>Annuler</AlertDialogCancel>
               <AlertDialogAction onClick={confirmDelete}>Supprimer</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Confirmation import */}
+        <AlertDialog open={!!pendingImport} onOpenChange={(o) => !o && !importing && setPendingImport(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Importer l&apos;inventaire ?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong>{pendingImport?.length ?? 0}</strong> article(s) détecté(s) dans le fichier.
+                Ils seront <strong>ajoutés</strong> à l&apos;inventaire actuel (les articles existants
+                ne sont pas modifiés ni dédoublonnés). Continuer ?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={importing}>Annuler</AlertDialogCancel>
+              <AlertDialogAction onClick={(e) => { e.preventDefault(); confirmImport() }} disabled={importing}>
+                {importing ? "Import…" : `Importer ${pendingImport?.length ?? 0} article(s)`}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

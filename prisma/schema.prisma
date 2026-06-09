@@ -536,6 +536,7 @@ model InventoryItem {
   unitValue   Float?   // Valeur unitaire estimée (€)
   location    String?  // Lieu de stockage (local, armoire, caisse…)
   condition   String?  // État : "new", "good", "worn", "broken"
+  expiryDate  DateTime? // Date de péremption (denrées, consommables…)
   photoUrl    String?  // Photo de l'article
   isActive    Boolean  @default(true) // Article archivé ou non
   createdAt   DateTime @default(now())

@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace"
+import { trimOrNull, parseDate, INVENTORY_CONDITIONS } from "@/lib/inventory"
 
-const trimOrNull = (v: unknown, max = 500): string | null => {
-  if (typeof v !== "string") return null
-  const t = v.trim()
-  return t ? t.slice(0, max) : null
-}
-
-const CONDITIONS = ["new", "good", "worn", "broken"]
+const CONDITIONS = INVENTORY_CONDITIONS as readonly string[]
 
 // GET /api/inventory/[id] — détail + historique des mouvements
 export async function GET(
@@ -59,6 +54,9 @@ export async function PATCH(
     if (body.isActive !== undefined) data.isActive = Boolean(body.isActive)
     if (body.condition !== undefined) {
       data.condition = CONDITIONS.includes(body.condition) ? body.condition : null
+    }
+    if (body.expiryDate !== undefined) {
+      data.expiryDate = parseDate(body.expiryDate)
     }
     if (body.minQuantity !== undefined) {
       const m = body.minQuantity === "" || body.minQuantity == null ? null : Number(body.minQuantity)

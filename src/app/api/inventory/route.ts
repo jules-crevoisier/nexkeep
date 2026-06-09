@@ -2,15 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace"
 import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
+import { trimOrNull, parseDate, INVENTORY_CONDITIONS } from "@/lib/inventory"
 
-// Champs texte bornés pour éviter les abus / payloads géants
-const trimOrNull = (v: unknown, max = 500): string | null => {
-  if (typeof v !== "string") return null
-  const t = v.trim()
-  return t ? t.slice(0, max) : null
-}
-
-const CONDITIONS = ["new", "good", "worn", "broken"]
+const CONDITIONS = INVENTORY_CONDITIONS as readonly string[]
 
 // GET /api/inventory — liste de l'inventaire de l'organisation active
 export async function GET() {
@@ -53,6 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const condition = CONDITIONS.includes(body.condition) ? body.condition : null
+    const expiryDate = parseDate(body.expiryDate)
 
     const item = await prisma.inventoryItem.create({
       data: {
@@ -66,6 +61,7 @@ export async function POST(request: NextRequest) {
         unitValue,
         location: trimOrNull(body.location, 200),
         condition,
+        expiryDate,
         photoUrl: trimOrNull(body.photoUrl, 1000),
         workspaceId: ctx.workspace.id,
         userId: ctx.userId,
