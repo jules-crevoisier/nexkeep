@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireWorkspace, requireRole, workspaceErrorResponse } from "@/lib/workspace"
+import { canAdminWorkspace } from "@/lib/permissions"
+import { ACTIVITY_TYPES, recordActivity } from "@/lib/activity"
 import { trimOrNull, parseDate, INVENTORY_CONDITIONS } from "@/lib/inventory"
 
 const CONDITIONS = INVENTORY_CONDITIONS as readonly string[]
+
+// Un membre ne peut modifier/supprimer qu'un article qu'il a lui-même créé ;
+// les administrateurs (et plus) peuvent gérer tous les articles.
+function canManageItem(
+  ctx: { role: string; userId: string },
+  item: { userId: string | null }
+): boolean {
+  return canAdminWorkspace(ctx.role as "VIEWER" | "MEMBER" | "ADMIN" | "OWNER") || item.userId === ctx.userId
+}
 
 // GET /api/inventory/[id] — détail + historique des mouvements
 export async function GET(
@@ -36,6 +47,12 @@ export async function PATCH(
       where: { id, workspaceId: ctx.workspace.id },
     })
     if (!existing) return NextResponse.json({ error: "Article non trouvé" }, { status: 404 })
+    if (!canManageItem(ctx, existing)) {
+      return NextResponse.json(
+        { error: "Vous ne pouvez modifier que les articles que vous avez ajoutés." },
+        { status: 403 }
+      )
+    }
 
     const body = await request.json()
     const data: Record<string, unknown> = {}
@@ -73,7 +90,47 @@ export async function PATCH(
       data.unitValue = u
     }
 
-    const item = await prisma.inventoryItem.update({ where: { id }, data })
+    // Quantité : modifiable depuis le formulaire (pratique pour l'inventaire).
+    // Tout écart avec le stock actuel est tracé comme un ajustement.
+    let adjust: { qty: number; newQty: number } | null = null
+    if (body.quantity !== undefined) {
+      const q = Number(body.quantity)
+      if (!Number.isFinite(q) || q < 0 || q > 1_000_000_000) {
+        return NextResponse.json({ error: "Quantité invalide" }, { status: 400 })
+      }
+      if (q !== existing.quantity) {
+        data.quantity = q
+        adjust = { qty: Math.abs(q - existing.quantity), newQty: q }
+      }
+    }
+
+    const item = adjust
+      ? await prisma.$transaction(async (tx) => {
+          await tx.inventoryMovement.create({
+            data: {
+              type: "adjust",
+              quantity: adjust.qty,
+              reason: "Ajustement (modification de l'article)",
+              itemId: id,
+              workspaceId: ctx.workspace.id,
+              userId: ctx.userId,
+            },
+          })
+          return tx.inventoryItem.update({ where: { id }, data })
+        })
+      : await prisma.inventoryItem.update({ where: { id }, data })
+
+    if (adjust) {
+      await recordActivity({
+        workspaceId: ctx.workspace.id,
+        type: ACTIVITY_TYPES.INVENTORY_MOVEMENT,
+        title: `Inventaire — ${item.name}`,
+        description: `Ajustement → ${adjust.newQty} ${item.unit}`,
+        actorId: ctx.userId,
+        metadata: { itemId: id, type: "adjust", newQuantity: adjust.newQty },
+      })
+    }
+
     return NextResponse.json(item)
   } catch (error) {
     return workspaceErrorResponse(error) ?? NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
@@ -92,6 +149,12 @@ export async function DELETE(
       where: { id, workspaceId: ctx.workspace.id },
     })
     if (!existing) return NextResponse.json({ error: "Article non trouvé" }, { status: 404 })
+    if (!canManageItem(ctx, existing)) {
+      return NextResponse.json(
+        { error: "Vous ne pouvez supprimer que les articles que vous avez ajoutés." },
+        { status: 403 }
+      )
+    }
 
     await prisma.inventoryItem.delete({ where: { id } })
     return NextResponse.json({ ok: true })

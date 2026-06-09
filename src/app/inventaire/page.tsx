@@ -1,8 +1,17 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   AlertDialog,
@@ -43,13 +52,12 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   ArrowUpFromLine,
-  Boxes,
-  Euro,
   Search,
   Eye,
   Download,
   Upload,
   CalendarClock,
+  ClipboardCheck,
 } from "lucide-react"
 
 interface InventoryItem {
@@ -66,6 +74,7 @@ interface InventoryItem {
   condition?: string | null
   expiryDate?: string | null
   isActive: boolean
+  userId?: string | null
 }
 
 interface ParsedRow {
@@ -98,9 +107,6 @@ const CONDITION_LABELS: Record<string, string> = {
   worn: "Usé",
   broken: "HS / Cassé",
 }
-
-const formatEuro = (n: number) =>
-  new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n)
 
 const emptyForm = {
   name: "",
@@ -142,14 +148,41 @@ const expiryStatus = (v?: string | null): "expired" | "soon" | null => {
   return null
 }
 
+// Texte relatif « il y a N jours » à partir d'une date ISO
+const relativeDays = (v?: string | null): string => {
+  if (!v) return ""
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return ""
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000)
+  if (days <= 0) return "aujourd'hui"
+  if (days === 1) return "hier"
+  if (days < 31) return `il y a ${days} jours`
+  const months = Math.floor(days / 30)
+  return months === 1 ? "il y a 1 mois" : `il y a ${months} mois`
+}
+
 export default function InventairePage() {
   // L'inventaire est un module à part, gouverné par le rôle dans l'organisation :
   // tout membre peut consulter, les membres (et plus) peuvent modifier, le lecteur
   // est en lecture seule.
-  const { canEditOrga, isViewer, orgaDeniedMessage } = usePermissions()
+  const { canEditOrga, canAdmin, isViewer, orgaDeniedMessage } = usePermissions()
   const guard = useGuardedAction(canEditOrga, orgaDeniedMessage)
+  const { data: session } = useSession()
+  const currentUserId = session?.user?.id
+
+  // Un membre ne peut modifier/supprimer que les articles qu'il a lui-même
+  // ajoutés ; les administrateurs gèrent tout. Entrée/sortie reste ouverte à tous.
+  const canManageItem = useCallback(
+    (item: InventoryItem) =>
+      canAdmin || (!!currentUserId && item.userId === currentUserId),
+    [canAdmin, currentUserId]
+  )
 
   const [items, setItems] = useState<InventoryItem[]>([])
+  const [lastInventoryAt, setLastInventoryAt] = useState<string | null>(null)
+  const [checkupOpen, setCheckupOpen] = useState(false)
+  const [checkupDate, setCheckupDate] = useState("")
+  const [savingCheckup, setSavingCheckup] = useState(false)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -158,6 +191,7 @@ export default function InventairePage() {
   const [editing, setEditing] = useState<InventoryItem | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [addingCategory, setAddingCategory] = useState(false)
 
   const [moveItem, setMoveItem] = useState<InventoryItem | null>(null)
   const [moveType, setMoveType] = useState<"in" | "out" | "adjust">("in")
@@ -173,8 +207,12 @@ export default function InventairePage() {
   const fetchItems = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/inventory")
+      const [res, checkupRes] = await Promise.all([
+        fetch("/api/inventory"),
+        fetch("/api/inventory/checkup"),
+      ])
       if (res.ok) setItems(await res.json())
+      if (checkupRes.ok) setLastInventoryAt((await checkupRes.json()).lastInventoryAt ?? null)
     } catch {
       // silencieux
     } finally {
@@ -191,9 +229,20 @@ export default function InventairePage() {
     [items]
   )
 
+  // Catégories proposées dans le formulaire : suggérées + celles déjà utilisées.
+  const formCategories = useMemo(
+    () =>
+      Array.from(new Set([...SUGGESTED_CATEGORIES, ...categories])).sort((a, b) =>
+        a.localeCompare(b, "fr")
+      ),
+    [categories]
+  )
+
+  const isLow = (i: InventoryItem) => i.minQuantity != null && i.quantity <= i.minQuantity
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return items.filter((i) => {
+    const list = items.filter((i) => {
       if (categoryFilter !== "all" && i.category !== categoryFilter) return false
       if (!q) return true
       return (
@@ -202,6 +251,13 @@ export default function InventairePage() {
         (i.location ?? "").toLowerCase().includes(q)
       )
     })
+    // Les articles en stock bas remontent en haut du tableau.
+    return list.sort((a, b) => {
+      const la = isLow(a) ? 0 : 1
+      const lb = isLow(b) ? 0 : 1
+      if (la !== lb) return la - lb
+      return a.name.localeCompare(b.name, "fr")
+    })
   }, [items, search, categoryFilter])
 
   const stats = useMemo(() => {
@@ -209,8 +265,42 @@ export default function InventairePage() {
     const lowStock = items.filter(
       (i) => i.minQuantity != null && i.quantity <= i.minQuantity
     ).length
-    return { count: items.length, totalValue, lowStock }
+    const expired = items.filter((i) => expiryStatus(i.expiryDate) === "expired").length
+    return { count: items.length, totalValue, lowStock, expired }
   }, [items])
+
+  // Résumé compact affiché sous le titre (ex. « 85 articles · 2 en stock bas »).
+  const summaryText = useMemo(() => {
+    const parts = [`${stats.count} article${stats.count > 1 ? "s" : ""}`]
+    if (stats.lowStock > 0) parts.push(`${stats.lowStock} en stock bas`)
+    if (stats.expired > 0) parts.push(`${stats.expired} périmé${stats.expired > 1 ? "s" : ""}`)
+    return parts.join(" · ")
+  }, [stats])
+
+  const openCheckup = guard.run(() => {
+    setCheckupDate(lastInventoryAt ? toDateInput(lastInventoryAt) : new Date().toISOString().split("T")[0])
+    setCheckupOpen(true)
+  })
+
+  const saveCheckup = async () => {
+    setSavingCheckup(true)
+    try {
+      const res = await fetch("/api/inventory/checkup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: checkupDate || null }),
+      })
+      if (!res.ok) throw new Error()
+      const d = await res.json()
+      setLastInventoryAt(d.lastInventoryAt ?? null)
+      setCheckupOpen(false)
+      toast.success("Date d'inventaire complet enregistrée")
+    } catch {
+      toast.error("Enregistrement impossible")
+    } finally {
+      setSavingCheckup(false)
+    }
+  }
 
   const exportToXLSX = () => {
     // On exporte la liste filtrée affichée (recherche + catégorie)
@@ -412,12 +502,14 @@ export default function InventairePage() {
   const openCreate = guard.run(() => {
     setEditing(null)
     setForm(emptyForm)
+    setAddingCategory(false)
     setFormOpen(true)
   })
 
   const openEdit = (item: InventoryItem) =>
     guard.run(() => {
       setEditing(item)
+      setAddingCategory(false)
       setForm({
         name: item.name,
         category: item.category ?? "",
@@ -452,7 +544,7 @@ export default function InventairePage() {
         condition: form.condition,
         expiryDate: form.expiryDate || null,
         description: form.description,
-        ...(editing ? {} : { quantity: form.quantity }),
+        quantity: form.quantity,
       }
       const res = await fetch(
         editing ? `/api/inventory/${editing.id}` : "/api/inventory",
@@ -540,12 +632,36 @@ export default function InventairePage() {
             )}
 
             {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h1 className="text-3xl font-bold">Inventaire</h1>
                 <p className="text-muted-foreground">
-                  Gérez le stock de matériel et de consommables du BDE
+                  {loading ? "Gestion du stock du BDE" : summaryText}
                 </p>
+                {/* Date du dernier inventaire complet (pointage physique du stock) */}
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <CalendarClock className="h-4 w-4" />
+                  {lastInventoryAt ? (
+                    <span>
+                      Dernier inventaire complet&nbsp;:{" "}
+                      <span className="font-medium text-foreground">
+                        {new Date(lastInventoryAt).toLocaleDateString("fr-FR")}
+                      </span>{" "}
+                      ({relativeDays(lastInventoryAt)})
+                    </span>
+                  ) : (
+                    <span>Aucun inventaire complet enregistré</span>
+                  )}
+                  {canEditOrga && (
+                    <button
+                      type="button"
+                      onClick={openCheckup}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      {lastInventoryAt ? "Mettre à jour" : "Enregistrer"}
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <input
@@ -569,50 +685,7 @@ export default function InventairePage() {
                   <Download className="mr-2 h-4 w-4" />
                   Exporter Excel
                 </Button>
-                <RestrictedButton
-                  allowed={canEditOrga}
-                  deniedMessage={orgaDeniedMessage}
-                  onClick={openCreate}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nouvel article
-                </RestrictedButton>
               </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Articles référencés</CardTitle>
-                  <Boxes className="h-4 w-4 text-blue-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{loading ? "-" : stats.count}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Valeur du stock</CardTitle>
-                  <Euro className="h-4 w-4 text-green-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
-                    {loading ? "-" : formatEuro(stats.totalValue)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className={stats.lowStock > 0 ? "border-amber-500/40" : undefined}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Alertes stock bas</CardTitle>
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${stats.lowStock > 0 ? "text-amber-600" : ""}`}>
-                    {loading ? "-" : stats.lowStock}
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
             {/* Filtres */}
@@ -643,14 +716,22 @@ export default function InventairePage() {
 
             {/* Liste */}
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle>Articles en stock</CardTitle>
+                <RestrictedButton
+                  allowed={canEditOrga}
+                  deniedMessage={orgaDeniedMessage}
+                  onClick={openCreate}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouvel article
+                </RestrictedButton>
               </CardHeader>
               <CardContent>
                 {loading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
+                      <Skeleton key={i} className="h-12 w-full" />
                     ))}
                   </div>
                 ) : filtered.length === 0 ? (
@@ -660,105 +741,123 @@ export default function InventairePage() {
                     description="Commencez par référencer le matériel et les consommables du BDE."
                   />
                 ) : (
-                  <div className="divide-y">
-                    {filtered.map((item) => {
-                      const low = item.minQuantity != null && item.quantity <= item.minQuantity
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex flex-wrap items-center justify-between gap-3 py-3"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-medium">{item.name}</p>
-                              {item.category && (
-                                <Badge variant="secondary">{item.category}</Badge>
-                              )}
-                              {item.condition && CONDITION_LABELS[item.condition] && (
-                                <Badge variant="outline">{CONDITION_LABELS[item.condition]}</Badge>
-                              )}
-                              {low && (
-                                <Badge variant="destructive">
-                                  <AlertTriangle className="h-3 w-3" /> Stock bas
-                                </Badge>
-                              )}
-                              {expiryStatus(item.expiryDate) === "expired" && (
-                                <Badge variant="destructive">
-                                  <CalendarClock className="h-3 w-3" /> Périmé
-                                </Badge>
-                              )}
-                              {expiryStatus(item.expiryDate) === "soon" && (
-                                <Badge className="border-transparent bg-amber-500 text-white">
-                                  <CalendarClock className="h-3 w-3" /> Bientôt périmé
-                                </Badge>
-                              )}
-                              {!item.isActive && <Badge variant="outline">Archivé</Badge>}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {[
-                                item.reference ? `Réf. ${item.reference}` : null,
-                                item.location ? `📍 ${item.location}` : null,
-                                item.unitValue != null ? `${formatEuro(item.unitValue)}/${item.unit}` : null,
-                                item.expiryDate
-                                  ? `Péremption : ${new Date(item.expiryDate).toLocaleDateString("fr-FR")}`
-                                  : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <p className={`text-lg font-bold ${low ? "text-amber-600" : ""}`}>
-                                {item.quantity} <span className="text-sm font-normal">{item.unit}</span>
-                              </p>
-                              {item.minQuantity != null && (
-                                <p className="text-xs text-muted-foreground">
-                                  seuil&nbsp;: {item.minQuantity}
-                                </p>
-                              )}
-                            </div>
-                            {canEditOrga && (
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Entrée de stock"
-                                  onClick={() => openMovement(item, "in")}
-                                >
-                                  <ArrowDownToLine className="h-4 w-4 text-green-600" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Sortie de stock"
-                                  onClick={() => openMovement(item, "out")}
-                                >
-                                  <ArrowUpFromLine className="h-4 w-4 text-red-600" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Modifier"
-                                  onClick={() => openEdit(item)}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Supprimer"
-                                  onClick={guard.run(() => setDeleteItem(item))}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Article</TableHead>
+                        <TableHead>Catégorie</TableHead>
+                        <TableHead className="text-right">Stock</TableHead>
+                        <TableHead>État</TableHead>
+                        {canEditOrga && <TableHead className="text-right">Actions</TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filtered.map((item) => {
+                        const low = isLow(item)
+                        const expiry = expiryStatus(item.expiryDate)
+                        const manage = canManageItem(item)
+                        return (
+                          <TableRow key={item.id} className={low ? "bg-amber-50/50 dark:bg-amber-950/10" : undefined}>
+                            <TableCell className="max-w-[280px]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{item.name}</span>
+                                {low && (
+                                  <Badge variant="destructive" className="gap-1">
+                                    <AlertTriangle className="h-3 w-3" /> Stock bas
+                                  </Badge>
+                                )}
+                                {!item.isActive && <Badge variant="outline">Archivé</Badge>}
                               </div>
+                              {(item.reference || item.location) && (
+                                <div className="text-xs text-muted-foreground">
+                                  {[
+                                    item.reference ? `Réf. ${item.reference}` : null,
+                                    item.location ? `📍 ${item.location}` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {item.category ? (
+                                <Badge variant="secondary">{item.category}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className={`font-semibold ${low ? "text-amber-600" : ""}`}>
+                                {item.quantity} <span className="text-xs font-normal text-muted-foreground">{item.unit}</span>
+                              </div>
+                              {item.minQuantity != null && (
+                                <div className="text-xs text-muted-foreground">seuil&nbsp;: {item.minQuantity}</div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {item.condition && CONDITION_LABELS[item.condition] && (
+                                  <Badge variant="outline">{CONDITION_LABELS[item.condition]}</Badge>
+                                )}
+                                {expiry === "expired" && (
+                                  <Badge variant="destructive" className="gap-1">
+                                    <CalendarClock className="h-3 w-3" /> Périmé
+                                  </Badge>
+                                )}
+                                {expiry === "soon" && (
+                                  <Badge className="gap-1 border-transparent bg-amber-500 text-white">
+                                    <CalendarClock className="h-3 w-3" /> Bientôt périmé
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            {canEditOrga && (
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Entrée de stock"
+                                    onClick={() => openMovement(item, "in")}
+                                  >
+                                    <ArrowDownToLine className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Sortie de stock"
+                                    onClick={() => openMovement(item, "out")}
+                                  >
+                                    <ArrowUpFromLine className="h-4 w-4 text-red-600" />
+                                  </Button>
+                                  {manage && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        title="Modifier"
+                                        onClick={() => openEdit(item)}
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        title="Supprimer"
+                                        onClick={guard.run(() => setDeleteItem(item))}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
                             )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
                 )}
               </CardContent>
             </Card>
@@ -783,17 +882,53 @@ export default function InventairePage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="f-cat">Catégorie</Label>
-                  <Input
-                    id="f-cat"
-                    list="cat-suggestions"
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  />
-                  <datalist id="cat-suggestions">
-                    {SUGGESTED_CATEGORIES.map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
+                  {addingCategory ? (
+                    <div className="flex gap-2">
+                      <Input
+                        id="f-cat"
+                        autoFocus
+                        placeholder="Nouvelle catégorie"
+                        value={form.category}
+                        onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setAddingCategory(false)
+                          setForm({ ...form, category: "" })
+                        }}
+                      >
+                        Annuler
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={form.category || "__none__"}
+                      onValueChange={(v) => {
+                        if (v === "__new__") {
+                          setAddingCategory(true)
+                          setForm({ ...form, category: "" })
+                        } else {
+                          setForm({ ...form, category: v === "__none__" ? "" : v })
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="f-cat">
+                        <SelectValue placeholder="Sélectionner…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Aucune</SelectItem>
+                        {formCategories.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__new__">+ Ajouter une catégorie…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="f-ref">Référence</Label>
@@ -805,18 +940,23 @@ export default function InventairePage() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {!editing && (
-                  <div className="space-y-2">
-                    <Label htmlFor="f-qty">Quantité initiale</Label>
-                    <Input
-                      id="f-qty"
-                      type="number"
-                      min="0"
-                      value={form.quantity}
-                      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                    />
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <Label htmlFor="f-qty">
+                    {editing ? "Quantité en stock" : "Quantité initiale"}
+                  </Label>
+                  <Input
+                    id="f-qty"
+                    type="number"
+                    min="0"
+                    value={form.quantity}
+                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                  />
+                  {editing && (
+                    <p className="text-xs text-muted-foreground">
+                      Modifier ce nombre enregistre un ajustement d&apos;inventaire.
+                    </p>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="f-unit">Unité</Label>
                   <Input
@@ -993,6 +1133,49 @@ export default function InventairePage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Dialog date du dernier inventaire complet */}
+        <Dialog open={checkupOpen} onOpenChange={setCheckupOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5" />
+                Inventaire complet
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Enregistrez la date du dernier pointage physique complet du stock.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="checkup-date">Date de l&apos;inventaire</Label>
+                <Input
+                  id="checkup-date"
+                  type="date"
+                  value={checkupDate}
+                  max={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => setCheckupDate(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCheckupDate(new Date().toISOString().split("T")[0])}
+                >
+                  Aujourd&apos;hui
+                </Button>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCheckupOpen(false)}>
+                Annuler
+              </Button>
+              <Button onClick={saveCheckup} disabled={savingCheckup || !checkupDate}>
+                {savingCheckup ? "Enregistrement…" : "Enregistrer"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <GuardedActionDialog
           open={guard.deniedOpen}

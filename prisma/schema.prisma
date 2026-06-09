@@ -52,6 +52,8 @@ model Workspace {
   cashInitial   Float    @default(0)
   shareToken    String?  @unique
   createdById   String?
+  // Date du dernier inventaire complet (pointage physique de tout le stock)
+  lastInventoryAt DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
